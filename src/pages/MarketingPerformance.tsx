@@ -34,7 +34,7 @@ export default function MarketingPerformance() {
     };
   });
 
-  const handleImport = (rows: Record<string, string>[]) => {
+  const handleImport = (rows: Record<string, string>[], sourceFileName = 'import.csv') => {
     // Helper function to get value with multiple possible column names
     const getValue = (r: Record<string, string>, keys: string[]): string => {
       for (const key of keys) {
@@ -92,7 +92,7 @@ export default function MarketingPerformance() {
     addImportJob({
       job_id: `IJ_${Date.now()}`,
       module: 'Advertising',
-      file_name: 'import.csv',
+      file_name: sourceFileName,
       file_size: 0,
       status: 'Completed',
       total_rows: rows.length,
