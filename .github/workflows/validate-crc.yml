@@ -1,0 +1,30 @@
+name: Validate CRC Dashboard
+
+on:
+  pull_request:
+    branches:
+      - crc-marketing-sales-dashboard-f6f75
+  push:
+    branches:
+      - feat/supabase-shared-storage
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Type-check
+        run: npx tsc --noEmit
+      - name: Build app
+        run: npm run build

@@ -1,5 +1,5 @@
 [build]
-  command = "npm install && npm run build && cp public/_redirects dist/_redirects 2>/dev/null || echo '/*    /index.html   200' > dist/_redirects"
+  command = "npm ci && npm run build"
   publish = "dist"
 
 [build.environment]
