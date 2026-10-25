@@ -44,7 +44,7 @@ export default function SalesManagement() {
     data.sales.reduce((acc: Record<string, number>, s) => { acc[s.salesperson] = (acc[s.salesperson] || 0) + s.net_sales; return acc; }, {})
   ).map(([name, value]) => ({ name, value }));
 
-  const handleImport = (rows: Record<string, string>[]) => {
+  const handleImport = (rows: Record<string, string>[], sourceFileName = 'import.csv') => {
     // Helper function to get value with multiple possible column names
     const getValue = (r: Record<string, string>, keys: string[]): string => {
       for (const key of keys) {
@@ -120,7 +120,7 @@ export default function SalesManagement() {
       };
     }).filter((item): item is NonNullable<typeof item> => item !== null);
     const result = addSales(items);
-    addImportJob({ job_id: `IJ_${Date.now()}`, module: 'Sales', file_name: 'import.csv', file_size: 0, status: 'Completed', total_rows: rows.length, new_rows: result.new, updated_rows: result.updated, skipped_rows: result.skipped, rejected_rows: result.rejected, errors: result.errors.map(e => ({ row: 0, field: '', message: e })), created_at: new Date().toISOString(), created_by: 'Admin' });
+    addImportJob({ job_id: `IJ_${Date.now()}`, module: 'Sales', file_name: sourceFileName, file_size: 0, status: 'Completed', total_rows: rows.length, new_rows: result.new, updated_rows: result.updated, skipped_rows: result.skipped, rejected_rows: result.rejected, errors: result.errors.map(e => ({ row: 0, field: '', message: e })), created_at: new Date().toISOString(), created_by: 'Admin' });
     return result;
   };
 
