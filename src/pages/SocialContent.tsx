@@ -35,46 +35,57 @@ export default function SocialContent() {
   const topContent = [...filtered].sort((a, b) => b.reach - a.reach).slice(0, 5);
 
   const handleImport = (rows: Record<string, string>[], sourceFileName = 'import.csv') => {
-    // Helper function to get value with multiple possible column names
-    const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9ก-๙]/g, '');
-    const getValue = (r: Record<string, string>, keys: string[]): string => {
-      for (const key of keys) if (r[key]?.trim()) return r[key].trim();
-      const aliases = keys.map(normalize);
-      const found = Object.entries(r).find(([key, value]) => value?.trim() && aliases.some(alias => normalize(key) === alias || normalize(key).startsWith(alias)));
-      return found?.[1]?.trim() || '';
+    const normalize = (value: string) => value.toLowerCase().replace(/^\\uFEFF/, '').replace(/[^a-z0-9ก-๙]/g, '');
+    const getValue = (r: Record<string, string>, aliases: string[]): string => {
+      const entries = Object.entries(r).filter(([, value]) => value?.trim());
+      const normalizedAliases = aliases.map(normalize);
+      for (const alias of normalizedAliases) { const exact = entries.find(([key]) => normalize(key) === alias); if (exact) return exact[1].trim(); }
+      for (const alias of normalizedAliases) { const match = entries.find(([key]) => { const k = normalize(key); return k.startsWith(alias) || k.endsWith(alias); }); if (match) return match[1].trim(); }
+      for (const alias of normalizedAliases) { const match = entries.find(([key]) => normalize(key).includes(alias)); if (match) return match[1].trim(); }
+      return '';
     };
-
-    const getNumber = (r: Record<string, string>, keys: string[]): number => {
-      const raw = getValue(r, keys).replace(/,/g, '').replace(/%/g, '').trim();
-      const num = Number(raw.replace(/[^0-9.\-]/g, ''));
+    const getNumber = (r: Record<string, string>, aliases: string[]): number => {
+      const raw = getValue(r, aliases).replace(/,/g, '').replace(/%/g, '').trim();
+      const num = Number(raw.replace(/[^0-9.\\-]/g, ''));
       return raw !== '' && Number.isFinite(num) ? num : 0;
     };
-
-    const items = rows.map(r => ({
-      id: '',
-      platform: getValue(r, ['platform', 'Platform', 'source', 'Source']) || 'Facebook',
-      page_id: getValue(r, ['page_id', 'Page ID', 'pageId']),
-      page_name: getValue(r, ['page_name', 'Page Name', 'pageName', 'page', 'Page name']),
-      post_id: getValue(r, ['post_id', 'Post ID', 'postId', 'post', 'Post ID']),
-      post_url: getValue(r, ['post_url', 'Post URL', 'postUrl', 'url', 'URL', 'Permalink', 'Post link']),
-      post_date: getValue(r, ['post_date', 'Post Date', 'postDate', 'date', 'Date', 'Publish time', 'Published']),
-      metric_date: getValue(r, ['metric_date', 'Metric Date', 'metricDate']),
-      content_type: getValue(r, ['content_type', 'Content Type', 'contentType', 'type', 'Type', 'Media type', 'Post type']),
-      content_category: getValue(r, ['content_category', 'Content Category', 'contentCategory', 'category', 'Category', 'Title', 'Post title']),
-      reach: getNumber(r, ['reach', 'Reach', 'Post reach', 'Reach (total)']),
-      impressions: getNumber(r, ['impressions', 'Impressions', 'Post impressions', 'Views']),
-      engagement: getNumber(r, ['engagement', 'Engagement', 'engagements', 'Post engagements', 'Interactions']),
-      reactions: getNumber(r, ['reactions', 'Reactions', 'reaction', 'likes', 'Likes', 'Post reactions', 'Reactions, comments and shares']),
-      comments: getNumber(r, ['comments', 'Comments', 'comment', 'Post comments']),
-      shares: getNumber(r, ['shares', 'Shares', 'share', 'Post shares']),
-      link_clicks: getNumber(r, ['link_clicks', 'Link Clicks', 'linkClicks', 'clicks', 'Clicks', 'Post link clicks', 'Link clicks']),
-      video_views: getNumber(r, ['video_views', 'Video Views', 'videoViews', 'views', 'Views', '3-second video views', 'Video views']),
-      source_file: sourceFileName,
-      source_data_json: JSON.stringify(r),
-      leads_generated: getNumber(r, ['leads_generated', 'Leads', 'leads', 'lead']),
-    }));
+    const getDate = (raw: string): string => {
+      if (!raw) return ''; const value = raw.trim(); const iso = value.match(/^(\\d{4})-(\\d{1,2})-(\\d{1,2})/);
+      if (iso) return iso[1] + '-' + iso[2].padStart(2, '0') + '-' + iso[3].padStart(2, '0');
+      const parsed = new Date(value); return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString().slice(0, 10);
+    };
+    const items = rows.map(r => {
+      const pageName = getValue(r, ['page_name', 'Page Name', 'pageName', 'page', 'Account name']);
+      const postUrl = getValue(r, ['post_url', 'Post URL', 'postUrl', 'url', 'Permalink', 'Post link', 'Content link']);
+      const postDate = getDate(getValue(r, ['post_date', 'Post Date', 'postDate', 'date', 'Publish time', 'Published', 'Post publish time', 'Date published']));
+      const title = getValue(r, ['content_category', 'Content Category', 'category', 'Title', 'Post title', 'Content title', 'Post description', 'Description']);
+      const rawPostId = getValue(r, ['post_id', 'Post ID', 'postId', 'Post identifier', 'Content ID', 'Post']);
+      const postId = rawPostId || postUrl || (postDate + '_' + title);
+      const metricDate = getDate(getValue(r, ['metric_date', 'Metric Date', 'Reporting date', 'Date'])) || postDate;
+      return {
+        id: '', platform: getValue(r, ['platform', 'Platform', 'source', 'Source', 'Network']) || 'Facebook',
+        page_id: getValue(r, ['page_id', 'Page ID', 'pageId', 'Account ID']) || pageName || 'Facebook',
+        page_name: pageName, post_id: postId, post_url: postUrl, post_date: postDate, metric_date: metricDate,
+        content_type: getValue(r, ['content_type', 'Content Type', 'type', 'Media type', 'Post type', 'Content format']) || 'Post',
+        content_category: title || 'Other',
+        reach: getNumber(r, ['reach', 'Post reach', 'Reach (total)', 'Lifetime Post Total Reach', 'Total reach', 'Accounts reached']),
+        impressions: getNumber(r, ['impressions', 'Post impressions', 'Views', 'Lifetime Post Total Impressions', 'Total impressions']),
+        engagement: getNumber(r, ['engagement', 'engagements', 'Post engagements', 'Interactions', 'Content interactions', 'People who engaged', 'Lifetime Engaged Users']),
+        reactions: getNumber(r, ['reactions', 'reaction', 'likes', 'Likes', 'Post reactions', 'Reactions, comments and shares', 'Content interactions']),
+        comments: getNumber(r, ['comments', 'comment', 'Post comments']), shares: getNumber(r, ['shares', 'share', 'Post shares']),
+        link_clicks: getNumber(r, ['link_clicks', 'Link Clicks', 'linkClicks', 'clicks', 'Clicks', 'Post link clicks', 'Outbound clicks']),
+        video_views: getNumber(r, ['video_views', 'Video Views', 'videoViews', '3-second video views', 'Video views', 'ThruPlays']),
+        source_file: sourceFileName, source_data_json: JSON.stringify(r),
+        leads_generated: getNumber(r, ['leads_generated', 'Leads', 'leads', 'lead']),
+      };
+    });
+    const metricFields: Array<keyof typeof items[number]> = ['reach', 'impressions', 'engagement', 'reactions', 'comments', 'shares', 'link_clicks', 'video_views', 'leads_generated'];
+    if (!items.some(item => metricFields.some(field => Number(item[field]) > 0))) {
+      window.alert('นำเข้าได้แต่ไม่พบตัวเลขสถิติที่ระบบรู้จัก กรุณาตรวจสอบชื่อคอลัมน์ในไฟล์ CSV และเลือกไฟล์รายงาน Content Performance จาก Meta');
+      return { new: 0, updated: 0, skipped: rows.length, rejected: rows.length, errors: ['ไม่พบคอลัมน์ตัวเลขสถิติที่รองรับในไฟล์'] };
+    }
     const result = addSocial(items);
-    addImportJob({ job_id: `IJ_${Date.now()}`, module: 'Social Content', file_name: sourceFileName, file_size: 0, status: 'Completed', total_rows: rows.length, new_rows: result.new, updated_rows: result.updated, skipped_rows: result.skipped, rejected_rows: result.rejected, errors: result.errors.map(e => ({ row: 0, field: '', message: e })), created_at: new Date().toISOString(), created_by: 'Admin' });
+    addImportJob({ job_id: 'IJ_' + Date.now(), module: 'Social Content', file_name: sourceFileName, file_size: 0, status: 'Completed', total_rows: rows.length, new_rows: result.new, updated_rows: result.updated, skipped_rows: result.skipped, rejected_rows: result.rejected, errors: result.errors.map(e => ({ row: 0, field: '', message: e })), created_at: new Date().toISOString(), created_by: 'Admin' });
     return result;
   };
 
