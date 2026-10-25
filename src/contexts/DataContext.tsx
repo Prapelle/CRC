@@ -65,21 +65,23 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const newAds = [...data.ads];
 
     ads.forEach((ad, idx) => {
-      const key = `${ad.campaign_id}_${ad.date}_${ad.report_level}`;
-      if (!ad.campaign_id || !ad.date) {
-        rejected++;
-        errors.push(`Row ${idx + 1}: Missing campaign_id or date`);
-        return;
-      }
+      // Auto-fill missing fields with fallbacks
+      const finalAd = { ...ad };
+      if (!finalAd.campaign_id) finalAd.campaign_id = `CAMPAIGN_${idx + 1}`;
+      if (!finalAd.date) finalAd.date = new Date().toISOString().split('T')[0];
+      if (!finalAd.platform) finalAd.platform = 'Other';
+      if (!finalAd.report_level) finalAd.report_level = 'Campaign';
+
+      const key = `${finalAd.campaign_id}_${finalAd.date}_${finalAd.report_level}`;
       if (existingIds.has(key)) {
         const existIdx = newAds.findIndex((a: AdvertisingPerformance) => `${a.campaign_id}_${a.date}_${a.report_level}` === key);
         if (existIdx >= 0) {
-          newAds[existIdx] = { ...newAds[existIdx], ...ad };
+          newAds[existIdx] = { ...newAds[existIdx], ...finalAd };
           updatedCount++;
         }
         skipped++;
       } else {
-        newAds.push({ ...ad, id: ad.id || generateId('A_') });
+        newAds.push({ ...finalAd, id: finalAd.id || generateId('A_') });
         existingIds.add(key);
         newCount++;
       }
@@ -96,16 +98,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const newItems = [...data.social];
 
     items.forEach((item, idx) => {
-      if (!item.post_id || !item.metric_date) {
-        rejected++;
-        errors.push(`Row ${idx + 1}: Missing post_id or metric_date`);
-        return;
-      }
-      const key = `${item.page_id}_${item.post_id}_${item.metric_date}`;
+      // Auto-fill missing fields with fallbacks
+      const finalItem = { ...item };
+      if (!finalItem.post_id) finalItem.post_id = `POST_${idx + 1}`;
+      if (!finalItem.metric_date) finalItem.metric_date = new Date().toISOString().split('T')[0];
+      if (!finalItem.page_id) finalItem.page_id = 'PAGE_DEFAULT';
+      if (!finalItem.platform) finalItem.platform = 'Facebook';
+      if (!finalItem.content_type) finalItem.content_type = 'Post';
+      if (!finalItem.content_category) finalItem.content_category = 'Other';
+
+      const key = `${finalItem.page_id}_${finalItem.post_id}_${finalItem.metric_date}`;
       if (existingKeys.has(key)) {
         skipped++;
       } else {
-        newItems.push({ ...item, id: item.id || generateId('SC_') });
+        newItems.push({ ...finalItem, id: finalItem.id || generateId('SC_') });
         existingKeys.add(key);
         newCount++;
       }
@@ -122,16 +128,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const newItems = [...data.website];
 
     items.forEach((item, idx) => {
-      if (!item.date || !item.source) {
-        rejected++;
-        errors.push(`Row ${idx + 1}: Missing date or source`);
-        return;
-      }
-      const key = `${item.date}_${item.source}_${item.medium}_${item.landing_page}`;
+      // Auto-fill missing fields with fallbacks
+      const finalItem = { ...item };
+      if (!finalItem.date) finalItem.date = new Date().toISOString().split('T')[0];
+      if (!finalItem.source) finalItem.source = 'Unknown';
+      if (!finalItem.medium) finalItem.medium = '(none)';
+      if (!finalItem.landing_page) finalItem.landing_page = '/';
+
+      const key = `${finalItem.date}_${finalItem.source}_${finalItem.medium}_${finalItem.landing_page}`;
       if (existingKeys.has(key)) {
         skipped++;
       } else {
-        newItems.push({ ...item, id: item.id || generateId('WA_') });
+        newItems.push({ ...finalItem, id: finalItem.id || generateId('WA_') });
         existingKeys.add(key);
         newCount++;
       }
@@ -155,20 +163,44 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const addLeads = (leads: Lead[]): ImportResult => {
     let newCount = 0, updatedCount = 0, skipped = 0, rejected = 0;
     const errors: string[] = [];
-    const existingPhones = new Set(data.leads.map((l: Lead) => l.phone));
+    const existingPhones = new Set(data.leads.map((l: Lead) => l.phone).filter(p => p));
     const newLeads = [...data.leads];
 
     leads.forEach((lead, idx) => {
-      if (!lead.customer_name) {
-        rejected++;
-        errors.push(`Row ${idx + 1}: Missing customer_name`);
-        return;
+      // Auto-fill missing customer_name with fallback
+      const finalLead = { ...lead };
+      if (!finalLead.customer_name) {
+        // Try to use contact_person or phone as fallback
+        finalLead.customer_name = finalLead.contact_person || finalLead.phone || `Lead_${idx + 1}`;
       }
-      if (lead.phone && existingPhones.has(lead.phone)) {
+      if (!finalLead.contact_person) {
+        finalLead.contact_person = finalLead.customer_name;
+      }
+      if (!finalLead.phone) {
+        finalLead.phone = `N/A_${idx + 1}`;
+      }
+      if (!finalLead.source) {
+        finalLead.source = 'Other';
+      }
+      if (!finalLead.product_category) {
+        finalLead.product_category = 'อื่น ๆ';
+      }
+      if (!finalLead.steel_type) {
+        finalLead.steel_type = 'อื่น ๆ';
+      }
+      if (!finalLead.customer_type) {
+        finalLead.customer_type = 'ลูกค้าทั่วไป';
+      }
+      if (!finalLead.assigned_to) {
+        finalLead.assigned_to = 'Unassigned';
+      }
+
+      // Skip duplicate by phone (only if phone is real)
+      if (finalLead.phone && !finalLead.phone.startsWith('N/A_') && existingPhones.has(finalLead.phone)) {
         skipped++;
       } else {
-        newLeads.push({ ...lead, lead_id: lead.lead_id || generateId('L_') });
-        if (lead.phone) existingPhones.add(lead.phone);
+        newLeads.push({ ...finalLead, lead_id: finalLead.lead_id || generateId('L_') });
+        if (finalLead.phone && !finalLead.phone.startsWith('N/A_')) existingPhones.add(finalLead.phone);
         newCount++;
       }
     });
@@ -195,16 +227,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const newItems = [...data.quotations];
 
     items.forEach((item, idx) => {
-      if (!item.quotation_number) {
-        rejected++;
-        errors.push(`Row ${idx + 1}: Missing quotation_number`);
-        return;
-      }
-      if (existingNums.has(item.quotation_number)) {
+      // Auto-fill missing fields with fallbacks
+      const finalItem = { ...item };
+      if (!finalItem.quotation_number) finalItem.quotation_number = `QT-${Date.now()}-${idx + 1}`;
+      if (!finalItem.quotation_date) finalItem.quotation_date = new Date().toISOString().split('T')[0];
+      if (!finalItem.valid_until) finalItem.valid_until = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      if (!finalItem.salesperson) finalItem.salesperson = 'Unassigned';
+      if (!finalItem.quotation_status) finalItem.quotation_status = 'Draft';
+      if (!finalItem.currency) finalItem.currency = 'THB';
+
+      if (existingNums.has(finalItem.quotation_number)) {
         skipped++;
       } else {
-        newItems.push({ ...item, quotation_id: item.quotation_id || generateId('Q_') });
-        existingNums.add(item.quotation_number);
+        newItems.push({ ...finalItem, quotation_id: finalItem.quotation_id || generateId('Q_') });
+        existingNums.add(finalItem.quotation_number);
         newCount++;
       }
     });
@@ -220,16 +256,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const newItems = [...data.sales];
 
     items.forEach((item, idx) => {
-      if (!item.order_number) {
-        rejected++;
-        errors.push(`Row ${idx + 1}: Missing order_number`);
-        return;
-      }
-      if (existingOrders.has(item.order_number)) {
+      // Auto-fill missing fields with fallbacks
+      const finalItem = { ...item };
+      if (!finalItem.order_number) finalItem.order_number = `ORD-${Date.now()}-${idx + 1}`;
+      if (!finalItem.customer_name) finalItem.customer_name = `Customer_${idx + 1}`;
+      if (!finalItem.order_date) finalItem.order_date = new Date().toISOString().split('T')[0];
+      if (!finalItem.sales_channel) finalItem.sales_channel = 'Direct';
+      if (!finalItem.salesperson) finalItem.salesperson = 'Unassigned';
+      if (!finalItem.order_status) finalItem.order_status = 'Confirmed';
+      if (!finalItem.payment_status) finalItem.payment_status = 'Unpaid';
+      if (!finalItem.customer_type) finalItem.customer_type = 'ลูกค้าทั่วไป';
+
+      if (existingOrders.has(finalItem.order_number)) {
         skipped++;
       } else {
-        newItems.push({ ...item, sales_id: item.sales_id || generateId('S_') });
-        existingOrders.add(item.order_number);
+        newItems.push({ ...finalItem, sales_id: finalItem.sales_id || generateId('S_') });
+        existingOrders.add(finalItem.order_number);
         newCount++;
       }
     });
