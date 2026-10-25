@@ -11,7 +11,7 @@ export default function SocialContent() {
   const { data, addSocial, addImportJob } = useData();
   const [showImport, setShowImport] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState('');
-  const [datePreset, setDatePreset] = useState('30d');
+  const [datePreset, setDatePreset] = useState('all');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
 
@@ -37,7 +37,29 @@ export default function SocialContent() {
   }, [datePreset, customStart, customEnd]);
 
   const dateFiltered = data.social.filter(item => {
-    const date = item.post_date || item.metric_date || '';
+    const rawDate = item.post_date || item.metric_date || '';
+    if (!rawDate) return datePreset === 'all';
+    const dateText = String(rawDate).trim();
+    const isoMatch = dateText.match(/^(\\d{4})-(\\d{1,2})-(\\d{1,2})/);
+    const slashMatch = dateText.match(/^(\\d{1,2})[\\/.-](\\d{1,2})[\\/.-](\\d{4})/);
+    let date = '';
+    if (isoMatch) {
+      date = `${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}`;
+    } else if (slashMatch) {
+      let first = Number(slashMatch[1]);
+      let second = Number(slashMatch[2]);
+      let year = Number(slashMatch[3]);
+      if (year > 2400) year -= 543;
+      // Interpret ambiguous slash dates as DD/MM/YYYY unless the first part must be a month.
+      const day = first > 12 ? first : second > 12 ? second : first;
+      const month = first > 12 ? second : second > 12 ? first : second;
+      date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    } else {
+      const parsed = new Date(dateText);
+      if (!Number.isNaN(parsed.getTime())) {
+        date = `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
+      }
+    }
     if (!date) return datePreset === 'all';
     return (!dateBounds.start || date >= dateBounds.start) && (!dateBounds.end || date <= dateBounds.end);
   });
@@ -98,9 +120,9 @@ export default function SocialContent() {
         content_type: getValue(r, ['content_type', 'Content Type', 'type', 'Media type', 'Post type', 'Content format']) || 'Post',
         content_category: title || 'Other',
         reach: getNumber(r, ['reach', 'Post reach', 'Reach (total)', 'Lifetime Post Total Reach', 'Total reach', 'Accounts reached']),
-        impressions: getNumber(r, ['impressions', 'Post impressions', 'Views', 'Lifetime Post Total Impressions', 'Total impressions']),
-        engagement: getNumber(r, ['engagement', 'engagements', 'Post engagements', 'Interactions', 'Content interactions', 'People who engaged', 'Lifetime Engaged Users']),
-        reactions: getNumber(r, ['reactions', 'reaction', 'likes', 'Likes', 'Post reactions', 'Reactions, comments and shares', 'Content interactions']),
+        impressions: getNumber(r, ['impressions', 'Post impressions', 'Lifetime Post Total Impressions', 'Total impressions']),
+        engagement: getNumber(r, ['engagement', 'engagements', 'Post engagements', 'Interactions', 'Content interactions', 'Reactions, comments and shares', 'People who engaged', 'Lifetime Engaged Users']),
+        reactions: getNumber(r, ['reactions', 'reaction', 'likes', 'Likes', 'Post reactions', 'Post reactions total']),
         comments: getNumber(r, ['comments', 'comment', 'Post comments']), shares: getNumber(r, ['shares', 'share', 'Post shares']),
         link_clicks: getNumber(r, ['link_clicks', 'Link Clicks', 'linkClicks', 'clicks', 'Clicks', 'Post link clicks', 'Outbound clicks']),
         video_views: getNumber(r, ['video_views', 'Video Views', 'videoViews', '3-second video views', 'Video views', 'ThruPlays']),
