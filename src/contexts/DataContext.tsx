@@ -252,7 +252,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const addSocial = (items: SocialContent[]): ImportResult => {
     let newCount = 0, updatedCount = 0, skipped = 0, rejected = 0;
     const errors: string[] = [];
-    const existingKeys = new Set(data.social.map((s: SocialContent) => `${s.page_id}_${s.post_id}_${s.metric_date}`));
+    const keyFor = (item: SocialContent) => `${item.page_id}_${item.post_id}_${item.metric_date}`;
+    const existingIndexes = new Map<string, number>();
+    data.social.forEach((item, index) => existingIndexes.set(keyFor(item), index));
     const newItems = [...data.social];
 
     items.forEach((item, idx) => {
@@ -265,12 +267,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
       if (!finalItem.content_type) finalItem.content_type = 'Post';
       if (!finalItem.content_category) finalItem.content_category = 'Other';
 
-      const key = `${finalItem.page_id}_${finalItem.post_id}_${finalItem.metric_date}`;
-      if (existingKeys.has(key)) {
-        skipped++;
+      const key = keyFor(finalItem);
+      const existingIndex = existingIndexes.get(key);
+      if (existingIndex !== undefined) {
+        const existing = newItems[existingIndex];
+        newItems[existingIndex] = { ...existing, ...finalItem, id: existing.id || finalItem.id || generateId('SC_') };
+        updatedCount++;
       } else {
+        const newIndex = newItems.length;
         newItems.push({ ...finalItem, id: finalItem.id || generateId('SC_') });
-        existingKeys.add(key);
+        existingIndexes.set(key, newIndex);
         newCount++;
       }
     });
