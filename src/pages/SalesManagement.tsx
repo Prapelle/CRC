@@ -72,6 +72,11 @@ export default function SalesManagement() {
     const getDate = (r: Record<string, string>, keys: string[]): string => {
       const raw = value(r, keys);
       if (!raw) return '';
+      // Excel stores dates as serial day numbers; convert them only in date fields.
+      if (/^\d{5}(\.\d+)?$/.test(raw)) {
+        const date = new Date(Date.UTC(1899, 11, 30) + Math.floor(Number(raw)) * 86400000);
+        return date.toISOString().slice(0, 10);
+      }
       // Supports YYYY-MM-DD, DD/MM/YYYY and DD-MM-YYYY. Preserve ISO dates unchanged.
       if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
       const match = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
