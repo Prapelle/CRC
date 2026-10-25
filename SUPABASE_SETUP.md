@@ -19,4 +19,7 @@ In Supabase, go to **Authentication → Users → Add user** and create/invite `
 ## Security notes
 - Never put a Supabase service-role/secret key in the frontend or Netlify's `VITE_*` variables.
 - The publishable key is intended for browser use; table access is controlled by Row Level Security.
-- This initial shared-state design gives signed-in users access to the shared dashboard dataset. Role-specific database permissions should be added before granting access to additional non-admin users.
+- The current SQL policy permits every authenticated account to read and update the shared dashboard payload. The frontend's role-based navigation is not a database authorization boundary.
+- Before inviting non-admin staff, design and enforce database permissions for each role. Until then, only the initial Admin account should be created.
+- The initial Admin role is assigned when the email matches `jsuparkit@gmail.com`. Other users default to Sales unless a trusted administrator sets `app_metadata.role`; do not use user-editable `user_metadata.role` to grant privileges.
+- The `app_metadata` role is managed through trusted administrative/server-side tooling, never through a browser client or a service-role key exposed in frontend code.
