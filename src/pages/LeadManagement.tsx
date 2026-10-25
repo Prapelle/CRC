@@ -38,7 +38,7 @@ export default function LeadManagement() {
     overdue: data.leads.filter(l => l.next_follow_up_at && new Date(l.next_follow_up_at) < new Date()).length,
   };
 
-  const handleImport = (rows: Record<string, string>[]) => {
+  const handleImport = (rows: Record<string, string>[], sourceFileName = 'import.csv') => {
     const leads: Lead[] = rows.map(r => {
       // Helper function to get value with multiple possible column names
       const getValue = (keys: string[]): string => {
@@ -70,7 +70,7 @@ export default function LeadManagement() {
       };
     });
     const result = addLeads(leads);
-    addImportJob({ job_id: `IJ_${Date.now()}`, module: 'Leads', file_name: 'import.csv', file_size: 0, status: 'Completed', total_rows: rows.length, new_rows: result.new, updated_rows: result.updated, skipped_rows: result.skipped, rejected_rows: result.rejected, errors: result.errors.map(e => ({ row: 0, field: '', message: e })), created_at: new Date().toISOString(), created_by: user?.full_name || 'Admin' });
+    addImportJob({ job_id: `IJ_${Date.now()}`, module: 'Leads', file_name: sourceFileName, file_size: 0, status: 'Completed', total_rows: rows.length, new_rows: result.new, updated_rows: result.updated, skipped_rows: result.skipped, rejected_rows: result.rejected, errors: result.errors.map(e => ({ row: 0, field: '', message: e })), created_at: new Date().toISOString(), created_by: user?.full_name || 'Admin' });
     return result;
   };
 
