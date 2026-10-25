@@ -141,7 +141,7 @@ interface ImportModalProps {
   title: string;
   moduleName: string;
   expectedColumns: string[];
-  onImport: (rows: Record<string, string>[]) => { new: number; updated: number; skipped: number; rejected: number; errors: string[] };
+  onImport: (rows: Record<string, string>[], fileName?: string) => { new: number; updated: number; skipped: number; rejected: number; errors: string[] };
 }
 
 export function ImportModal({ isOpen, onClose, title, expectedColumns, onImport }: ImportModalProps) {
@@ -195,7 +195,7 @@ export function ImportModal({ isOpen, onClose, title, expectedColumns, onImport 
   };
 
   const handleImport = () => {
-    const res = onImport(parsedData);
+    const res = onImport(parsedData, fileName);
     setResult(res);
     setStep('result');
   };
