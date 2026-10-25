@@ -17,7 +17,10 @@ interface ImportResult {
 
 interface DataContextType {
   data: DataStore;
-  refresh: () => void;
+  dataLoading: boolean;
+  dataLoadError: string;
+  dataReady: boolean;
+  refresh: () => Promise<void>;
   addCampaign: (c: Campaign) => void;
   updateCampaign: (id: string, c: Partial<Campaign>) => void;
   addAds: (ads: AdvertisingPerformance[]) => ImportResult;
@@ -40,51 +43,99 @@ const DataContext = createContext<DataContextType>({} as DataContextType);
 export function DataProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [data, setData] = useState<DataStore>(loadData);
+  const [dataLoading, setDataLoading] = useState(false);
+  const [dataLoadError, setDataLoadError] = useState('');
+  const [loadedUserId, setLoadedUserId] = useState<string | null>(null);
+  const dataReady = Boolean(user && loadedUserId === user.user_id && !dataLoading && !dataLoadError);
 
   const refresh = useCallback(async () => {
-    if (!supabase) {
-      setData(loadData());
-      return;
+    setDataLoading(true);
+    setDataLoadError('');
+    try {
+      if (!user) {
+        setData(loadData());
+        setLoadedUserId(null);
+        return;
+      }
+      if (!supabase) {
+        throw new Error('Supabase environment variables are missing.');
+      }
+
+      const { data: row, error } = await supabase
+        .from('crc_dashboard_state')
+        .select('payload')
+        .eq('id', 'shared')
+        .maybeSingle();
+      if (error) throw error;
+
+      if (row?.payload) {
+        const payload = row.payload as Partial<DataStore>;
+        setData({
+          campaigns: payload.campaigns ?? [], ads: payload.ads ?? [], social: payload.social ?? [],
+          website: payload.website ?? [], leads: payload.leads ?? [], quotations: payload.quotations ?? [],
+          sales: payload.sales ?? [], importJobs: payload.importJobs ?? [], users: [], initialized: true,
+        });
+      } else {
+        // Seed the shared record only when the table is empty; never overwrite an existing dataset.
+        const emptyData = loadData();
+        const { error: initError } = await supabase.from('crc_dashboard_state').upsert({
+          id: 'shared',
+          payload: emptyData,
+          updated_at: new Date().toISOString(),
+          updated_by: user.user_id,
+        });
+        if (initError) throw initError;
+        setData(emptyData);
+      }
+      setLoadedUserId(user.user_id);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'Unknown database error';
+      console.error('Failed to load shared CRC data:', detail);
+      setLoadedUserId(null);
+      setDataLoadError(`โหลดข้อมูลส่วนกลางไม่สำเร็จ: ${detail}`);
+    } finally {
+      setDataLoading(false);
     }
-    const { data: row, error } = await supabase
-      .from('crc_dashboard_state')
-      .select('payload')
-      .eq('id', 'shared')
-      .maybeSingle();
-    if (error) {
-      console.error('Failed to load shared CRC data:', error.message);
-      return;
-    }
-    if (row?.payload) {
-      const payload = row.payload as Partial<DataStore>;
-      setData({
-        campaigns: payload.campaigns ?? [], ads: payload.ads ?? [], social: payload.social ?? [],
-        website: payload.website ?? [], leads: payload.leads ?? [], quotations: payload.quotations ?? [],
-        sales: payload.sales ?? [], importJobs: payload.importJobs ?? [], users: [], initialized: true,
-      });
-    }
-  }, []);
+  }, [user?.user_id]);
 
   useEffect(() => {
     // Remove stale demo/local browser data; it is deliberately not migrated.
     localStorage.removeItem('crc_dashboard_data');
-    if (user) void refresh();
-    else setData(loadData());
+    if (user) {
+      setLoadedUserId(null);
+      void refresh();
+    } else {
+      setData(loadData());
+      setLoadedUserId(null);
+      setDataLoading(false);
+      setDataLoadError('');
+    }
   }, [refresh, user?.user_id]);
 
   const persist = (newData: DataStore) => {
+    if (!user || !dataReady) {
+      console.error('Shared CRC data is not ready; the change was not saved.');
+      return;
+    }
     const nextData = { ...newData, users: [] };
     setData(nextData);
     if (!supabase) {
-      console.error('Supabase is not configured. Dashboard changes cannot be saved.');
+      const message = 'Supabase is not configured. Dashboard changes cannot be saved.';
+      console.error(message);
+      setDataLoadError(message);
       return;
     }
     void supabase.from('crc_dashboard_state').upsert({
       id: 'shared',
       payload: JSON.parse(JSON.stringify(nextData)),
       updated_at: new Date().toISOString(),
+      updated_by: user.user_id,
     }).then(({ error }) => {
-      if (error) console.error('Failed to save shared CRC data:', error.message);
+      if (error) {
+        console.error('Failed to save shared CRC data:', error.message);
+        setDataLoadError(`บันทึกข้อมูลส่วนกลางไม่สำเร็จ: ${error.message}`);
+        setLoadedUserId(null);
+      }
     });
   };
 
@@ -357,7 +408,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   return (
     <DataContext.Provider value={{
-      data, refresh, addCampaign, updateCampaign, addAds, addSocial, addWebsite,
+      data, dataLoading, dataLoadError, dataReady, refresh,
+      addCampaign, updateCampaign, addAds, addSocial, addWebsite,
       addLead, updateLead, addLeads, addQuotation, updateQuotation, addQuotations,
       addSales, updateSales, addImportJob, getQualityIssues,
     }}>
