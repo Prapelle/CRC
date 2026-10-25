@@ -40,8 +40,8 @@ export default function SocialContent() {
     const rawDate = item.post_date || item.metric_date || '';
     if (!rawDate) return datePreset === 'all';
     const dateText = String(rawDate).trim();
-    const isoMatch = dateText.match(/^(\\d{4})-(\\d{1,2})-(\\d{1,2})/);
-    const slashMatch = dateText.match(/^(\\d{1,2})[\\/.-](\\d{1,2})[\\/.-](\\d{4})/);
+    const isoMatch = dateText.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    const slashMatch = dateText.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})/);
     let date = '';
     if (isoMatch) {
       date = `${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}`;
@@ -86,7 +86,7 @@ export default function SocialContent() {
   const topContent = [...filtered].sort((a, b) => b.reach - a.reach).slice(0, 5);
 
   const handleImport = (rows: Record<string, string>[], sourceFileName = 'import.csv') => {
-    const normalize = (value: string) => value.toLowerCase().replace(/^\\uFEFF/, '').replace(/[^a-z0-9ก-๙]/g, '');
+    const normalize = (value: string) => value.toLowerCase().replace(/^\uFEFF/, '').replace(/[^a-z0-9ก-๙]/g, '');
     const getValue = (r: Record<string, string>, aliases: string[]): string => {
       const entries = Object.entries(r).filter(([, value]) => value?.trim());
       const normalizedAliases = aliases.map(normalize);
@@ -97,26 +97,26 @@ export default function SocialContent() {
     };
     const getNumber = (r: Record<string, string>, aliases: string[]): number => {
       const raw = getValue(r, aliases).replace(/,/g, '').replace(/%/g, '').trim();
-      const num = Number(raw.replace(/[^0-9.\\-]/g, ''));
+      const num = Number(raw.replace(/[^0-9.-]/g, ''));
       return raw !== '' && Number.isFinite(num) ? num : 0;
     };
     // Strict header matching for reactions prevents the combined
     // "Reactions, comments and shares" metric being counted as reactions.
     const getExactNumber = (r: Record<string, string>, aliases: string[]): number => {
-      const normalized = (value: string) => value.toLowerCase().replace(/^\\uFEFF/, '').replace(/[^a-z0-9ก-๙]/g, '');
+      const normalized = (value: string) => value.toLowerCase().replace(/^\uFEFF/, '').replace(/[^a-z0-9ก-๙]/g, '');
       const keys = new Map(Object.entries(r).map(([key, value]) => [normalized(key), value]));
       for (const alias of aliases) {
         const value = keys.get(normalized(alias));
         if (value?.trim()) {
           const raw = value.replace(/,/g, '').replace(/%/g, '').trim();
-          const num = Number(raw.replace(/[^0-9.\\-]/g, ''));
+          const num = Number(raw.replace(/[^0-9.-]/g, ''));
           return Number.isFinite(num) ? num : 0;
         }
       }
       return 0;
     };
     const getDate = (raw: string): string => {
-      if (!raw) return ''; const value = raw.trim(); const iso = value.match(/^(\\d{4})-(\\d{1,2})-(\\d{1,2})/);
+      if (!raw) return ''; const value = raw.trim(); const iso = value.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
       if (iso) return iso[1] + '-' + iso[2].padStart(2, '0') + '-' + iso[3].padStart(2, '0');
       const parsed = new Date(value); return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString().slice(0, 10);
     };
