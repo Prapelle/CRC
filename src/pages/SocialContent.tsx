@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useData } from '../contexts/DataContext';
 import { KPICard, ImportModal } from '../components/shared';
 import { formatNumber } from '../data/store';
@@ -11,8 +11,37 @@ export default function SocialContent() {
   const { data, addSocial, addImportJob } = useData();
   const [showImport, setShowImport] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [datePreset, setDatePreset] = useState('30d');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
 
-  const filtered = categoryFilter ? data.social.filter(s => s.content_category === categoryFilter) : data.social;
+  const dateBounds = useMemo(() => {
+    const today = new Date();
+    const end = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const start = new Date(end);
+    if (datePreset === '7d') start.setDate(start.getDate() - 6);
+    else if (datePreset === '30d') start.setDate(start.getDate() - 29);
+    else if (datePreset === '90d') start.setDate(start.getDate() - 89);
+    else if (datePreset === 'month') start.setDate(1);
+    else if (datePreset === 'year') { start.setMonth(0, 1); }
+    else if (datePreset === 'custom') {
+      return { start: customStart || '', end: customEnd || '' };
+    } else if (datePreset === 'all') return { start: '', end: '' };
+    const toISO = (date: Date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+    return { start: toISO(start), end: toISO(end) };
+  }, [datePreset, customStart, customEnd]);
+
+  const dateFiltered = data.social.filter(item => {
+    const date = item.post_date || item.metric_date || '';
+    if (!date) return datePreset === 'all';
+    return (!dateBounds.start || date >= dateBounds.start) && (!dateBounds.end || date <= dateBounds.end);
+  });
+  const filtered = categoryFilter ? dateFiltered.filter(s => s.content_category === categoryFilter) : dateFiltered;
   const totalReach = filtered.reduce((s, i) => s + i.reach, 0);
   const totalEngagement = filtered.reduce((s, i) => s + i.engagement, 0);
   const totalReactions = filtered.reduce((s, i) => s + i.reactions, 0);
@@ -91,11 +120,37 @@ export default function SocialContent() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <p className="text-sm text-gray-500">Track content performance across social platforms</p>
-        <button onClick={() => setShowImport(true)} className="flex items-center gap-2 bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-orange-600">
+        <button onClick={() => setShowImport(true)} className="flex items-center gap-2 self-start bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-orange-600">
           <Upload size={16} /> Import CSV
         </button>
+      </div>
+
+      <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 md:flex-row md:items-end md:flex-wrap">
+        <div className="min-w-48">
+          <label htmlFor="social-date-preset" className="mb-1 block text-xs font-medium text-gray-600">ช่วงเวลา</label>
+          <select id="social-date-preset" value={datePreset} onChange={e => setDatePreset(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+            <option value="7d">7 วันล่าสุด</option>
+            <option value="30d">30 วันล่าสุด</option>
+            <option value="90d">90 วันล่าสุด</option>
+            <option value="month">เดือนนี้</option>
+            <option value="year">ปีนี้</option>
+            <option value="custom">กำหนดเอง</option>
+            <option value="all">ทุกช่วงเวลา</option>
+          </select>
+        </div>
+        {datePreset === 'custom' && <>
+          <div>
+            <label htmlFor="social-start-date" className="mb-1 block text-xs font-medium text-gray-600">ตั้งแต่วันที่</label>
+            <input id="social-start-date" type="date" value={customStart} max={customEnd || undefined} onChange={e => setCustomStart(e.target.value)} className="rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label htmlFor="social-end-date" className="mb-1 block text-xs font-medium text-gray-600">ถึงวันที่</label>
+            <input id="social-end-date" type="date" value={customEnd} min={customStart || undefined} onChange={e => setCustomEnd(e.target.value)} className="rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+          </div>
+        </>}
+        <p className="text-xs text-gray-500">{datePreset === 'all' ? 'แสดงข้อมูลทุกช่วงเวลา' : datePreset === 'custom' ? `ช่วงที่เลือก: ${customStart || 'ไม่ระบุวันเริ่มต้น'} – ${customEnd || 'ไม่ระบุวันสิ้นสุด'}` : `ช่วงข้อมูล: ${dateBounds.start} – ${dateBounds.end}`} · {filtered.length.toLocaleString()} รายการ</p>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
@@ -148,7 +203,7 @@ export default function SocialContent() {
           <h3 className="text-sm font-semibold text-gray-800">All Content</h3>
           <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} className="text-xs border rounded px-2 py-1">
             <option value="">All Categories</option>
-            {[...new Set(data.social.map(s => s.content_category))].map(c => <option key={c} value={c}>{c}</option>)}
+            {[...new Set(dateFiltered.map(s => s.content_category))].map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
         <div className="overflow-x-auto">
