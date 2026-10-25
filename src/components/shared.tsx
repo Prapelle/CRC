@@ -77,54 +77,88 @@ export function ImportModal({ isOpen, onClose, title, expectedColumns, onImport 
 
     const reader = new FileReader();
     reader.onload = (ev) => {
-      const text = ev.target?.result as string;
-      const lines = text.split(/\r?\n/).filter(l => l.trim());
-      if (lines.length < 2) return;
-
-      // Parse CSV with proper handling of quoted values
-      const parseCSVLine = (line: string): string[] => {
-        const result: string[] = [];
-        let current = '';
-        let inQuotes = false;
-
-        for (let i = 0; i < line.length; i++) {
-          const char = line[i];
+      const text = String(ev.target?.result || '').replace(/^\uFEFF/, '');
+      // Parse quoted CSV safely, including escaped quotes and newlines inside cells.
+      const parseDelimited = (input: string, delimiter: string): string[][] => {
+        const records: string[][] = [];
+        let record: string[] = [];
+        let cell = '';
+        let quoted = false;
+        for (let i = 0; i < input.length; i++) {
+          const char = input[i];
           if (char === '"') {
-            inQuotes = !inQuotes;
-          } else if (char === ',' && !inQuotes) {
-            result.push(current.trim());
-            current = '';
+            if (quoted && input[i + 1] === '"') { cell += '"'; i++; }
+            else quoted = !quoted;
+          } else if (char === delimiter && !quoted) {
+            record.push(cell.trim());
+            cell = '';
+          } else if ((char === '\n' || char === '\r') && !quoted) {
+            if (char === '\r' && input[i + 1] === '\n') i++;
+            record.push(cell.trim());
+            if (record.some(value => value !== '')) records.push(record);
+            record = [];
+            cell = '';
           } else {
-            current += char;
+            cell += char;
           }
         }
-        result.push(current.trim());
-        return result;
+        record.push(cell.trim());
+        if (record.some(value => value !== '')) records.push(record);
+        return records;
       };
 
-      const headers = parseCSVLine(lines[0]).map(h => h.replace(/"/g, '').trim());
-      
-      // Debug: Log detected headers
-      console.log('📋 Detected CSV Headers:', headers);
-      console.log('📊 First row sample:', parseCSVLine(lines[1]));
-      
-      const rows = lines.slice(1).map(line => {
-        const values = parseCSVLine(line);
+      // Detect comma, tab, or semicolon exports instead of assuming commas.
+      const candidates = [',', '\t', ';'].map(delimiter => {
+        const records = parseDelimited(text, delimiter);
+        const sample = records.slice(0, 20);
+        const widths = sample.map(row => row.filter(value => value !== '').length);
+        return { delimiter, records, score: widths.length ? Math.max(...widths) + (new Set(widths).size === 1 ? 2 : 0) : 0 };
+      }).sort((a, b) => b.score - a.score);
+      const records = candidates[0]?.records || [];
+      if (records.length < 2) {
+        console.error('Import failed: the file has no readable header and data rows.');
+        return;
+      }
+
+      const normalize = (value: string) => value.toLowerCase().replace(/^\uFEFF/, '').replace(/[^a-z0-9ก-๙]+/g, '');
+      const expected = expectedColumns.map(normalize);
+      // Some exports include report titles or date ranges above the actual header.
+      // Choose a row with many populated, unique column labels and expected-field matches.
+      const headerLimit = Math.min(records.length - 1, 40);
+      let headerIndex = 0;
+      let bestScore = -Infinity;
+      for (let i = 0; i < headerLimit; i++) {
+        const cells = records[i].map(value => value.trim());
+        const populated = cells.filter(Boolean);
+        if (populated.length < 2) continue;
+        const uniqueRatio = new Set(populated.map(normalize)).size / populated.length;
+        const expectedMatches = populated.reduce((sum, value) => {
+          const key = normalize(value);
+          return sum + (expected.some(item => item && (key === item || key.includes(item) || item.includes(key))) ? 1 : 0);
+        }, 0);
+        const score = populated.length * 2 + uniqueRatio * 3 + expectedMatches * 5 - (cells.length - populated.length);
+        if (score > bestScore) { bestScore = score; headerIndex = i; }
+      }
+
+      const headers = records[headerIndex].map((h, i) => (h || `column_${i + 1}`).replace(/^\uFEFF/, '').trim());
+      const rows = records.slice(headerIndex + 1).map(values => {
         const row: Record<string, string> = {};
-        headers.forEach((h, i) => { 
-          const value = values[i] ? values[i].replace(/"/g, '').trim() : '';
-          row[h] = value;
-        });
+        headers.forEach((header, i) => { row[header] = (values[i] || '').trim(); });
         return row;
-      });
-      
-      console.log('📝 Parsed rows:', rows.length);
-      console.log('🔍 First row data:', rows[0]);
-      
+      }).filter(row => Object.values(row).some(value => value !== ''));
+
+      console.log('📋 Detected CSV headers:', headers, 'header row:', headerIndex + 1);
+      console.log('📝 Parsed non-empty rows:', rows.length);
+      if (!rows.length) {
+        console.error('Import failed: the detected header has no data rows.');
+        return;
+      }
       setParsedData(rows);
       setStep('preview');
     };
-    reader.readAsText(file);
+    reader.readAsText(file, 'UTF-8');
+    // Let the same file be selected again after an unsuccessful attempt.
+    e.target.value = '';
   };
 
   const handleImport = () => {
@@ -160,8 +194,8 @@ export function ImportModal({ isOpen, onClose, title, expectedColumns, onImport 
               <div className="border-2 border-dashed border-gray-300 rounded-xl p-12 hover:border-orange-400 transition-colors">
                 <Upload className="mx-auto text-gray-400 mb-4" size={48} />
                 <p className="text-gray-600 mb-2">Drop CSV file here or click to browse</p>
-                <p className="text-xs text-gray-400 mb-4">Supported: CSV files with headers</p>
-                <input ref={fileRef} type="file" accept=".csv" onChange={handleFile} className="hidden" />
+                <p className="text-xs text-gray-400 mb-4">Supported: CSV / TSV files with headers (UTF-8, quoted values)</p>
+                <input ref={fileRef} type="file" accept=".csv,.tsv,.txt" onChange={handleFile} className="hidden" />
                 <button
                   onClick={() => fileRef.current?.click()}
                   className="bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-orange-600"
