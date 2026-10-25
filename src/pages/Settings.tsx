@@ -18,7 +18,7 @@ export default function Settings() {
   const { data, refresh } = useData();
   const [showReset, setShowReset] = useState(false);
   const [resetDone, setResetDone] = useState(false);
-  
+
   // Google Sheets Config
   const [gsConfig, setGsConfig] = useState<GoogleSheetsConfig>(() => {
     const saved = localStorage.getItem('crc_google_sheets_config');
@@ -181,14 +181,14 @@ export default function Settings() {
       } else {
         // Save to localStorage
         const currentData = JSON.parse(localStorage.getItem('crc_dashboard_data') || '{}');
-        
+
         // Merge data (Google Sheets data takes precedence)
         if (result.campaigns) currentData.campaigns = result.campaigns;
         if (result.advertising) currentData.ads = result.advertising;
         if (result.leads) currentData.leads = result.leads;
         if (result.quotations) currentData.quotations = result.quotations;
         if (result.sales) currentData.sales = result.sales;
-        
+
         localStorage.setItem('crc_dashboard_data', JSON.stringify(currentData));
         refresh();
 
@@ -226,7 +226,7 @@ export default function Settings() {
         <h3 className="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
           <Link size={16} /> Google Sheets Integration
         </h3>
-        
+
         <div className="space-y-4">
           {/* Status */}
           <div className={`p-3 rounded-lg border ${
