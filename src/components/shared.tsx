@@ -80,13 +80,13 @@ export function ImportModal({ isOpen, onClose, title, expectedColumns, onImport 
       const text = ev.target?.result as string;
       const lines = text.split(/\r?\n/).filter(l => l.trim());
       if (lines.length < 2) return;
-      
+
       // Parse CSV with proper handling of quoted values
       const parseCSVLine = (line: string): string[] => {
         const result: string[] = [];
         let current = '';
         let inQuotes = false;
-        
+
         for (let i = 0; i < line.length; i++) {
           const char = line[i];
           if (char === '"') {
@@ -102,17 +102,25 @@ export function ImportModal({ isOpen, onClose, title, expectedColumns, onImport 
         return result;
       };
 
-      const headers = parseCSVLine(lines[0]);
+      const headers = parseCSVLine(lines[0]).map(h => h.replace(/"/g, '').trim());
+
+      // Debug: Log detected headers
+      console.log('📋 Detected CSV Headers:', headers);
+      console.log('📊 First row sample:', parseCSVLine(lines[1]));
+
       const rows = lines.slice(1).map(line => {
         const values = parseCSVLine(line);
         const row: Record<string, string> = {};
-        headers.forEach((h, i) => { 
-          const header = h.replace(/"/g, '').trim();
+        headers.forEach((h, i) => {
           const value = values[i] ? values[i].replace(/"/g, '').trim() : '';
-          row[header] = value;
+          row[h] = value;
         });
         return row;
       });
+
+      console.log('📝 Parsed rows:', rows.length);
+      console.log('🔍 First row data:', rows[0]);
+
       setParsedData(rows);
       setStep('preview');
     };
@@ -171,6 +179,21 @@ export function ImportModal({ isOpen, onClose, title, expectedColumns, onImport 
                 <span className="text-sm font-medium">{fileName}</span>
                 <span className="text-xs text-gray-500">({parsedData.length} rows)</span>
               </div>
+
+              {/* Show detected columns */}
+              {parsedData.length > 0 && (
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-xs font-semibold text-blue-800 mb-2">📋 Detected Columns:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.keys(parsedData[0]).map((col, i) => (
+                      <span key={i} className="text-xs bg-white px-2 py-1 rounded border border-blue-300 text-blue-700">
+                        {col}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="overflow-x-auto border rounded-lg">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50">
