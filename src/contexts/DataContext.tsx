@@ -5,6 +5,7 @@ import type {
 } from '../types';
 import { loadData, generateId } from '../data/store';
 import { supabase } from '../lib/supabase';
+import { useAuth } from './AuthContext';
 
 interface ImportResult {
   new: number;
@@ -37,6 +38,7 @@ interface DataContextType {
 const DataContext = createContext<DataContextType>({} as DataContextType);
 
 export function DataProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const [data, setData] = useState<DataStore>(loadData);
 
   const refresh = useCallback(async () => {
@@ -66,8 +68,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Remove stale demo/local browser data; it is deliberately not migrated.
     localStorage.removeItem('crc_dashboard_data');
-    void refresh();
-  }, [refresh]);
+    if (user) void refresh();
+    else setData(loadData());
+  }, [refresh, user?.user_id]);
 
   const persist = (newData: DataStore) => {
     const nextData = { ...newData, users: [] };
@@ -78,7 +81,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
     void supabase.from('crc_dashboard_state').upsert({
       id: 'shared',
-      payload: nextData,
+      payload: JSON.parse(JSON.stringify(nextData)),
       updated_at: new Date().toISOString(),
     }).then(({ error }) => {
       if (error) console.error('Failed to save shared CRC data:', error.message);
