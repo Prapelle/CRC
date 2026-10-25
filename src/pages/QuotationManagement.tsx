@@ -14,7 +14,7 @@ export default function QuotationManagement() {
   const [selectedQ, setSelectedQ] = useState<string | null>(null);
 
   const filtered = statusFilter ? data.quotations.filter(q => q.quotation_status === statusFilter) : data.quotations;
-  
+
   const totalValue = data.quotations.reduce((s, q) => s + q.grand_total, 0);
   const openValue = data.quotations.filter(q => ['Sent', 'Negotiation', 'Pending Approval'].includes(q.quotation_status)).reduce((s, q) => s + q.grand_total, 0);
   const convertedCount = data.quotations.filter(q => q.quotation_status === 'Converted to Order').length;
