@@ -86,7 +86,7 @@ export default function Settings() {
 
     try {
       console.log('🔍 Testing connection to:', gsConfig.apiUrl);
-      
+
       // Use no-cors mode to avoid CORS issues
       const response = await fetch(`${gsConfig.apiUrl}?action=readAll`, {
         method: 'GET',
@@ -94,7 +94,7 @@ export default function Settings() {
       });
 
       console.log('📡 Response:', response);
-      
+
       // With no-cors, we can't read the response, but if it doesn't throw an error, it's working
       setGsConfig(prev => ({
         ...prev,
@@ -102,7 +102,7 @@ export default function Settings() {
         syncMessage: '✅ เชื่อมต่อสำเร็จ! (ไม่สามารถอ่าน response ได้เนื่องจาก CORS)',
         enabled: true,
       }));
-      
+
     } catch (error: any) {
       console.error('❌ Connection error:', error);
       setGsConfig(prev => ({
@@ -142,16 +142,16 @@ export default function Settings() {
 
       let totalSynced = 0;
       let errors = [];
-      
+
       for (const module of modules) {
         if (module.data.length > 0) {
           try {
             console.log(`📤 Syncing ${module.name}: ${module.data.length} records`);
-            
+
             const response = await fetch(gsConfig.apiUrl, {
               method: 'POST',
               mode: 'no-cors', // Avoid CORS issues
-              headers: { 
+              headers: {
                 'Content-Type': 'text/plain',
               },
               body: JSON.stringify({
@@ -160,11 +160,11 @@ export default function Settings() {
                 records: module.data,
               }),
             });
-            
+
             // With no-cors, we can't read response, but if no error thrown, it's working
             totalSynced += module.data.length;
             console.log(`✅ ${module.name} synced successfully`);
-            
+
           } catch (err: any) {
             console.error(`❌ Error syncing ${module.name}:`, err);
             errors.push(`${module.name}: ${err?.message || 'Unknown error'}`);
@@ -216,12 +216,12 @@ export default function Settings() {
 
     try {
       console.log('📥 Loading data from Google Sheets...');
-      
+
       const response = await fetch(`${gsConfig.apiUrl}?action=readAll`, {
         method: 'GET',
         mode: 'cors', // Try CORS first
       });
-      
+
       const result = await response.json();
       console.log('📥 Received data:', result);
 
@@ -255,7 +255,7 @@ export default function Settings() {
       }
     } catch (error: any) {
       console.error('❌ Load error:', error);
-      
+
       // If CORS error, suggest using no-cors mode
       if (error.message?.includes('CORS') || error.message?.includes('Failed to fetch')) {
         setGsConfig(prev => ({
