@@ -63,6 +63,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [loadedUserId, setLoadedUserId] = useState<string | null>(null);
   const lastUpdatedAtRef = useRef<string | null>(null);
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  // Keep the latest in-memory snapshot available to back-to-back actions (e.g. save imported rows, then save import history).
+  const dataRef = useRef<DataStore>(data);
+  useEffect(() => { dataRef.current = data; }, [data]);
   const dataReady = Boolean(user && loadedUserId === user.user_id && lastUpdatedAtRef.current && !dataLoading && !dataLoadError);
 
   const refresh = useCallback(async () => {
@@ -165,6 +168,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const client = supabase;
     const currentUserId = user.user_id;
     const nextData = { ...newData, users: [] };
+    dataRef.current = nextData;
     setData(nextData);
 
     // Serialize writes from this browser session, while the updated_at condition
@@ -442,7 +446,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   };
 
   const addImportJob = (job: ImportJob) => {
-    persist({ ...data, importJobs: [job, ...data.importJobs] });
+    // Import handlers call addX(...) and addImportJob(...) consecutively. Use the latest snapshot
+    // so saving the history entry cannot overwrite the rows just imported from the prior action.
+    const latest = dataRef.current;
+    persist({ ...latest, importJobs: [job, ...latest.importJobs] });
   };
 
   const getQualityIssues = (): DataQualityIssue[] => {
