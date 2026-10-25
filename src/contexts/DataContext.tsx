@@ -1,9 +1,10 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import type {
   Campaign, AdvertisingPerformance, SocialContent, WebsiteAnalytics,
   Lead, Quotation, SalesOrder, ImportJob, DataQualityIssue, DataStore
 } from '../types';
-import { loadData, saveData, generateId } from '../data/store';
+import { loadData, generateId } from '../data/store';
+import { supabase } from '../lib/supabase';
 
 interface ImportResult {
   new: number;
@@ -38,13 +39,50 @@ const DataContext = createContext<DataContextType>({} as DataContextType);
 export function DataProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<DataStore>(loadData);
 
-  const refresh = useCallback(() => {
-    setData(loadData());
+  const refresh = useCallback(async () => {
+    if (!supabase) {
+      setData(loadData());
+      return;
+    }
+    const { data: row, error } = await supabase
+      .from('crc_dashboard_state')
+      .select('payload')
+      .eq('id', 'shared')
+      .maybeSingle();
+    if (error) {
+      console.error('Failed to load shared CRC data:', error.message);
+      return;
+    }
+    if (row?.payload) {
+      const payload = row.payload as Partial<DataStore>;
+      setData({
+        campaigns: payload.campaigns ?? [], ads: payload.ads ?? [], social: payload.social ?? [],
+        website: payload.website ?? [], leads: payload.leads ?? [], quotations: payload.quotations ?? [],
+        sales: payload.sales ?? [], importJobs: payload.importJobs ?? [], users: [], initialized: true,
+      });
+    }
   }, []);
 
+  useEffect(() => {
+    // Remove stale demo/local browser data; it is deliberately not migrated.
+    localStorage.removeItem('crc_dashboard_data');
+    void refresh();
+  }, [refresh]);
+
   const persist = (newData: DataStore) => {
-    saveData(newData);
-    setData({ ...newData });
+    const nextData = { ...newData, users: [] };
+    setData(nextData);
+    if (!supabase) {
+      console.error('Supabase is not configured. Dashboard changes cannot be saved.');
+      return;
+    }
+    void supabase.from('crc_dashboard_state').upsert({
+      id: 'shared',
+      payload: nextData,
+      updated_at: new Date().toISOString(),
+    }).then(({ error }) => {
+      if (error) console.error('Failed to save shared CRC data:', error.message);
+    });
   };
 
   const addCampaign = (c: Campaign) => {
