@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
 import type {
   Campaign, AdvertisingPerformance, SocialContent, WebsiteAnalytics,
   Lead, Quotation, SalesOrder, ImportJob, DataQualityIssue, DataStore
@@ -38,6 +38,21 @@ interface DataContextType {
   getQualityIssues: () => DataQualityIssue[];
 }
 
+function normalizeStore(payload: Partial<DataStore>): DataStore {
+  return {
+    campaigns: payload.campaigns ?? [],
+    ads: payload.ads ?? [],
+    social: payload.social ?? [],
+    website: payload.website ?? [],
+    leads: payload.leads ?? [],
+    quotations: payload.quotations ?? [],
+    sales: payload.sales ?? [],
+    importJobs: payload.importJobs ?? [],
+    users: [],
+    initialized: true,
+  };
+}
+
 const DataContext = createContext<DataContextType>({} as DataContextType);
 
 export function DataProvider({ children }: { children: ReactNode }) {
@@ -46,7 +61,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [dataLoading, setDataLoading] = useState(false);
   const [dataLoadError, setDataLoadError] = useState('');
   const [loadedUserId, setLoadedUserId] = useState<string | null>(null);
-  const dataReady = Boolean(user && loadedUserId === user.user_id && !dataLoading && !dataLoadError);
+  const lastUpdatedAtRef = useRef<string | null>(null);
+  const dataReady = Boolean(user && loadedUserId === user.user_id && lastUpdatedAtRef.current && !dataLoading && !dataLoadError);
 
   const refresh = useCallback(async () => {
     setDataLoading(true);
@@ -54,6 +70,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     try {
       if (!user) {
         setData(loadData());
+        lastUpdatedAtRef.current = null;
         setLoadedUserId(null);
         return;
       }
@@ -63,34 +80,59 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
       const { data: row, error } = await supabase
         .from('crc_dashboard_state')
-        .select('payload')
+        .select('payload, updated_at')
         .eq('id', 'shared')
         .maybeSingle();
       if (error) throw error;
 
       if (row?.payload) {
-        const payload = row.payload as Partial<DataStore>;
-        setData({
-          campaigns: payload.campaigns ?? [], ads: payload.ads ?? [], social: payload.social ?? [],
-          website: payload.website ?? [], leads: payload.leads ?? [], quotations: payload.quotations ?? [],
-          sales: payload.sales ?? [], importJobs: payload.importJobs ?? [], users: [], initialized: true,
-        });
+        setData(normalizeStore(row.payload as Partial<DataStore>));
+        lastUpdatedAtRef.current = row.updated_at ?? null;
       } else {
-        // Seed the shared record only when the table is empty; never overwrite an existing dataset.
+        // Insert only when no shared row exists. If another session initializes first,
+        // reload its row rather than overwriting it with an empty dataset.
         const emptyData = loadData();
-        const { error: initError } = await supabase.from('crc_dashboard_state').upsert({
-          id: 'shared',
-          payload: emptyData,
-          updated_at: new Date().toISOString(),
-          updated_by: user.user_id,
-        });
-        if (initError) throw initError;
-        setData(emptyData);
+        const { data: inserted, error: initError } = await supabase
+          .from('crc_dashboard_state')
+          .insert({
+            id: 'shared',
+            payload: emptyData,
+            updated_at: new Date().toISOString(),
+            updated_by: user.user_id,
+          })
+          .select('payload, updated_at')
+          .maybeSingle();
+
+        if (initError?.code === '23505') {
+          const { data: racedRow, error: racedError } = await supabase
+            .from('crc_dashboard_state')
+            .select('payload, updated_at')
+            .eq('id', 'shared')
+            .maybeSingle();
+          if (racedError) throw racedError;
+          if (!racedRow?.payload || !racedRow.updated_at) {
+            throw new Error('Shared row was created by another session but could not be reloaded.');
+          }
+          setData(normalizeStore(racedRow.payload as Partial<DataStore>));
+          lastUpdatedAtRef.current = racedRow.updated_at;
+        } else {
+          if (initError) throw initError;
+          if (!inserted?.payload || !inserted.updated_at) {
+            throw new Error('The shared dashboard row could not be initialized.');
+          }
+          setData(normalizeStore(inserted.payload as Partial<DataStore>));
+          lastUpdatedAtRef.current = inserted.updated_at;
+        }
+      }
+
+      if (!lastUpdatedAtRef.current) {
+        throw new Error('The shared dashboard row has no update timestamp.');
       }
       setLoadedUserId(user.user_id);
     } catch (error) {
       const detail = error instanceof Error ? error.message : 'Unknown database error';
       console.error('Failed to load shared CRC data:', detail);
+      lastUpdatedAtRef.current = null;
       setLoadedUserId(null);
       setDataLoadError(`โหลดข้อมูลส่วนกลางไม่สำเร็จ: ${detail}`);
     } finally {
@@ -103,9 +145,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('crc_dashboard_data');
     if (user) {
       setLoadedUserId(null);
+      lastUpdatedAtRef.current = null;
       void refresh();
     } else {
       setData(loadData());
+      lastUpdatedAtRef.current = null;
       setLoadedUserId(null);
       setDataLoading(false);
       setDataLoadError('');
@@ -113,30 +157,43 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [refresh, user?.user_id]);
 
   const persist = (newData: DataStore) => {
-    if (!user || !dataReady) {
+    if (!user || !dataReady || !supabase || !lastUpdatedAtRef.current) {
       console.error('Shared CRC data is not ready; the change was not saved.');
       return;
     }
+    const previousUpdatedAt = lastUpdatedAtRef.current;
     const nextData = { ...newData, users: [] };
+    const nextUpdatedAt = new Date(Math.max(Date.now(), Date.parse(previousUpdatedAt) + 1)).toISOString();
+
     setData(nextData);
-    if (!supabase) {
-      const message = 'Supabase is not configured. Dashboard changes cannot be saved.';
-      console.error(message);
-      setDataLoadError(message);
-      return;
-    }
-    void supabase.from('crc_dashboard_state').upsert({
-      id: 'shared',
-      payload: JSON.parse(JSON.stringify(nextData)),
-      updated_at: new Date().toISOString(),
-      updated_by: user.user_id,
-    }).then(({ error }) => {
-      if (error) {
-        console.error('Failed to save shared CRC data:', error.message);
-        setDataLoadError(`บันทึกข้อมูลส่วนกลางไม่สำเร็จ: ${error.message}`);
-        setLoadedUserId(null);
-      }
-    });
+    void supabase
+      .from('crc_dashboard_state')
+      .update({
+        payload: JSON.parse(JSON.stringify(nextData)),
+        updated_at: nextUpdatedAt,
+        updated_by: user.user_id,
+      })
+      .eq('id', 'shared')
+      .eq('updated_at', previousUpdatedAt)
+      .select('updated_at')
+      .maybeSingle()
+      .then(({ data: savedRow, error }) => {
+        if (error) {
+          console.error('Failed to save shared CRC data:', error.message);
+          setDataLoadError(`บันทึกข้อมูลส่วนกลางไม่สำเร็จ: ${error.message}`);
+          setLoadedUserId(null);
+          return;
+        }
+        if (!savedRow?.updated_at) {
+          const message = 'ข้อมูลส่วนกลางถูกอัปเดตจากอีกเซสชันแล้ว กรุณาโหลดข้อมูลใหม่ก่อนแก้ไขต่อ';
+          console.warn(message);
+          setDataLoadError(message);
+          setLoadedUserId(null);
+          lastUpdatedAtRef.current = null;
+          return;
+        }
+        lastUpdatedAtRef.current = savedRow.updated_at;
+      });
   };
 
   const addCampaign = (c: Campaign) => {
