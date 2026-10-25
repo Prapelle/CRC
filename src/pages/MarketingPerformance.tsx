@@ -34,7 +34,7 @@ export default function MarketingPerformance() {
     };
   });
 
-  const handleImport = (rows: Record<string, string>[]) => {
+  const handleImport = (rows: Record<string, string>[], sourceFileName = 'import.csv') => {
     // Helper function to get value with multiple possible column names
     const getValue = (r: Record<string, string>, keys: string[]): string => {
       for (const key of keys) {
@@ -48,31 +48,53 @@ export default function MarketingPerformance() {
 
     const getNumber = (r: Record<string, string>, keys: string[]): number => {
       const value = getValue(r, keys);
-      const num = parseFloat(value);
-      return isNaN(num) ? 0 : num;
+      // Handles exported values such as THB145.28, ฿1,250.00, percentages and comma separators.
+      const cleaned = value.replace(/THB|฿|บาท/gi, '').replace(/,/g, '').replace(/%/g, '').replace(/[^0-9.\-]/g, '');
+      const num = Number(cleaned);
+      return cleaned !== '' && Number.isFinite(num) ? num : 0;
     };
+    const normalizeKey = (value: string) => value.toLowerCase().replace(/[^a-z0-9ก-๙]/g, '');
+    const getByNormalizedName = (r: Record<string, string>, aliases: string[]): string => {
+      const aliasKeys = aliases.map(normalizeKey);
+      const found = Object.entries(r).find(([key, value]) => value?.trim() && aliasKeys.includes(normalizeKey(key)));
+      return found?.[1]?.trim() || '';
+    };
+    const value = (r: Record<string, string>, aliases: string[]) => getValue(r, aliases) || getByNormalizedName(r, aliases);
 
-    const ads = rows.map(r => ({
-      id: '',
-      campaign_id: getValue(r, ['campaign_id', 'Campaign ID', 'campaign', 'Campaign']),
-      platform: (getValue(r, ['platform', 'Platform', 'source', 'Source']) || 'Facebook Ads') as any,
-      report_level: (getValue(r, ['report_level', 'Report Level', 'level', 'Level']) || 'Campaign') as any,
-      date: getValue(r, ['date', 'Date', 'day', 'Day']),
-      spend: getNumber(r, ['spend', 'Spend', 'cost', 'Cost', 'amount', 'Amount']),
-      impressions: getNumber(r, ['impressions', 'Impressions', 'impression', 'Impression']),
-      reach: getNumber(r, ['reach', 'Reach']),
-      clicks: getNumber(r, ['clicks', 'Clicks', 'click', 'Click']),
-      ctr: getNumber(r, ['ctr', 'CTR', 'click_through_rate', 'Click Through Rate']),
-      cpc: getNumber(r, ['cpc', 'CPC', 'cost_per_click', 'Cost Per Click']),
-      cpm: getNumber(r, ['cpm', 'CPM', 'cost_per_mille', 'Cost Per Mille']),
-      leads: getNumber(r, ['leads', 'Leads', 'lead', 'Lead']),
-      qualified_leads: getNumber(r, ['qualified_leads', 'Qualified Leads', 'qualified', 'Qualified']),
-    }));
+    const ads = rows.map(r => {
+      const sourceStart = value(r, ['Reporting starts', 'Date', 'Day', 'วันที่', 'วัน/เดือน/ปี']);
+      const spend = getNumber(r, ['spend', 'Spend', 'cost', 'Cost', 'amount', 'Amount', 'ค่าใช้จ่าย', 'ต้นทุน']);
+      const impressions = getNumber(r, ['impressions', 'Impressions', 'impression', 'Impression', 'การแสดงผล']);
+      const clicks = getNumber(r, ['clicks', 'Clicks', 'click', 'Click', 'การคลิก']);
+      const campaignName = value(r, ['campaign_id', 'Campaign ID', 'campaign', 'Campaign', 'Campaign name', 'Campaign Name', 'Ad name', 'Ad Name', 'Search']);
+      const rawPlatform = value(r, ['platform', 'Platform', 'source', 'Source', 'Campaign type', 'Network']) || '';
+      const platform = /google|search/i.test(rawPlatform) || Object.keys(r).some(k => normalizeKey(k) === 'search') ? 'Google Ads'
+        : /facebook|meta|instagram/i.test(rawPlatform) || Object.keys(r).some(k => normalizeKey(k) === 'reportingstarts') ? 'Facebook Ads'
+        : rawPlatform || 'Other';
+      return {
+        id: '',
+        campaign_id: campaignName || value(r, ['Campaign ID', 'campaign_id']) || 'Imported Campaign',
+        platform: platform as any,
+        report_level: (value(r, ['report_level', 'Report Level', 'level', 'Level']) || (value(r, ['Ad name', 'Ad Name']) ? 'Ad' : 'Campaign')) as any,
+        date: sourceStart || new Date().toISOString().split('T')[0],
+        spend,
+        impressions,
+        reach: getNumber(r, ['reach', 'Reach', 'accounts reached']),
+        clicks,
+        ctr: getNumber(r, ['ctr', 'CTR', 'click_through_rate', 'Click Through Rate', 'CTR (all)']),
+        cpc: getNumber(r, ['cpc', 'CPC', 'cost_per_click', 'Cost Per Click', 'Cost per click (all)']),
+        cpm: getNumber(r, ['cpm', 'CPM', 'cost_per_mille', 'Cost Per Mille', 'CPM (cost per 1,000 impressions)']),
+        leads: getNumber(r, ['leads', 'Leads', 'lead', 'Lead', 'Conversions', 'Results', 'Messaging conversations started']),
+        source_file: sourceFileName,
+        source_data_json: JSON.stringify(r),
+        qualified_leads: getNumber(r, ['qualified_leads', 'Qualified Leads', 'qualified', 'Qualified']),
+      };
+    }).filter(item => item.campaign_id !== 'Imported Campaign' || item.spend || item.impressions || item.clicks);
     const result = addAds(ads);
     addImportJob({
       job_id: `IJ_${Date.now()}`,
       module: 'Advertising',
-      file_name: 'import.csv',
+      file_name: sourceFileName,
       file_size: 0,
       status: 'Completed',
       total_rows: rows.length,

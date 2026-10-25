@@ -38,39 +38,41 @@ export default function LeadManagement() {
     overdue: data.leads.filter(l => l.next_follow_up_at && new Date(l.next_follow_up_at) < new Date()).length,
   };
 
-  const handleImport = (rows: Record<string, string>[]) => {
+  const handleImport = (rows: Record<string, string>[], sourceFileName = 'import.csv') => {
     const leads: Lead[] = rows.map(r => {
       // Helper function to get value with multiple possible column names
       const getValue = (keys: string[]): string => {
         for (const key of keys) {
           const value = r[key];
-          if (value && value.trim() !== '') {
-            return value.trim();
-          }
+          if (value && value.trim() !== '') return value.trim();
         }
-        return '';
+        const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9ก-๙]/g, '');
+        const aliases = keys.map(normalize);
+        return Object.entries(r).find(([key, value]) => value?.trim() && aliases.includes(normalize(key)))?.[1]?.trim() || '';
       };
 
       return {
         lead_id: '',
         created_at: new Date().toISOString().split('T')[0],
-        inquiry_date: getValue(['inquiry_date', 'Date', 'date', 'Inquiry Date', 'inquiryDate']) || new Date().toISOString().split('T')[0],
-        source: getValue(['source', 'Source', 'lead_source', 'Lead Source']) || 'Other',
-        customer_type: (getValue(['customer_type', 'Customer Type', 'type', 'Type']) || 'ลูกค้าทั่วไป') as CustomerType,
-        customer_name: getValue(['customer_name', 'Customer Name', 'Company', 'company', 'name', 'Name', 'customer', 'Customer']),
+        inquiry_date: getValue(['inquiry_date', 'Date', 'date', 'Inquiry Date', 'inquiryDate', 'วันที่', 'วัน/เดือน/ปี']) || new Date().toISOString().split('T')[0],
+        source: getValue(['source', 'Source', 'lead_source', 'Lead Source', 'แหล่งที่มา', 'ช่องทาง']) || 'Other',
+        customer_type: (getValue(['customer_type', 'Customer Type', 'type', 'Type', 'ประเภทลูกค้า']) || 'ลูกค้าทั่วไป') as CustomerType,
+        customer_name: getValue(['customer_name', 'Customer Name', 'Company', 'company', 'name', 'Name', 'customer', 'Customer', 'ชื่อลูกค้า', 'ชื่อลูกค้า/บริษัท', 'ชื่อลูกค้า/ชื่อบริษัท']),
         contact_person: getValue(['contact_person', 'Contact', 'contact', 'Contact Person', 'contactPerson']),
-        phone: getValue(['phone', 'Phone', 'tel', 'Tel', 'telephone', 'Telephone', 'mobile', 'Mobile']),
-        email: getValue(['email', 'Email', 'e-mail', 'E-mail']),
-        product_category: getValue(['product_category', 'Product', 'product', 'category', 'Category']),
-        steel_type: getValue(['steel_type', 'Steel Type', 'steel', 'Steel', 'product_type', 'Product Type']),
+        phone: getValue(['phone', 'Phone', 'tel', 'Tel', 'telephone', 'Telephone', 'mobile', 'Mobile', 'โทรศัพท์', 'เบอร์โทร', 'เบอร์โทรศัพท์']),
+        email: getValue(['email', 'Email', 'e-mail', 'E-mail', 'อีเมล']),
+        product_category: getValue(['product_category', 'Product', 'product', 'category', 'Category', 'หมวดสินค้า', 'สินค้า', 'กลุ่มสินค้า']),
+        steel_type: getValue(['steel_type', 'Steel Type', 'steel', 'Steel', 'product_type', 'Product Type', 'ชนิดเหล็ก', 'ประเภทเหล็ก', 'เกรดเหล็ก']),
         lead_status: 'New Lead' as LeadStatus,
         lead_temperature: 'Warm' as LeadTemperature,
-        assigned_to: getValue(['assigned_to', 'Assigned To', 'assignee', 'Assignee', 'salesperson', 'Salesperson']) || user?.full_name || '',
+        assigned_to: getValue(['assigned_to', 'Assigned To', 'assignee', 'Assignee', 'salesperson', 'Salesperson', 'พนักงานขาย', 'ผู้รับผิดชอบ']) || user?.full_name || '',
+        source_file: sourceFileName,
+        source_data_json: JSON.stringify(r),
         status_history: [{ date: new Date().toISOString().split('T')[0], from_status: '', to_status: 'New Lead', changed_by: user?.full_name || 'System' }],
       };
     });
     const result = addLeads(leads);
-    addImportJob({ job_id: `IJ_${Date.now()}`, module: 'Leads', file_name: 'import.csv', file_size: 0, status: 'Completed', total_rows: rows.length, new_rows: result.new, updated_rows: result.updated, skipped_rows: result.skipped, rejected_rows: result.rejected, errors: result.errors.map(e => ({ row: 0, field: '', message: e })), created_at: new Date().toISOString(), created_by: user?.full_name || 'Admin' });
+    addImportJob({ job_id: `IJ_${Date.now()}`, module: 'Leads', file_name: sourceFileName, file_size: 0, status: 'Completed', total_rows: rows.length, new_rows: result.new, updated_rows: result.updated, skipped_rows: result.skipped, rejected_rows: result.rejected, errors: result.errors.map(e => ({ row: 0, field: '', message: e })), created_at: new Date().toISOString(), created_by: user?.full_name || 'Admin' });
     return result;
   };
 

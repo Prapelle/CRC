@@ -52,13 +52,96 @@ export function StatusBadge({ status, colorClass }: StatusBadgeProps) {
 }
 
 // ============ IMPORT MODAL ============
+
+async function parseExcelFile(file: File): Promise<string[][]> {
+  if (typeof DecompressionStream === 'undefined') throw new Error('เบราว์เซอร์นี้ไม่รองรับ Excel กรุณาบันทึกเป็น CSV แล้วนำเข้าใหม่');
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const decoder = new TextDecoder('utf-8');
+  const entries = new Map<string, Uint8Array>();
+  const u16 = (i: number) => view.getUint16(i, true);
+  const u32 = (i: number) => view.getUint32(i, true);
+  let eocd = -1;
+  for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i--) {
+    if (u32(i) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error('ไฟล์ Excel ไม่ใช่ .xlsx ที่ถูกต้อง');
+  let offset = u32(eocd + 16);
+  const count = u16(eocd + 10);
+  for (let n = 0; n < count; n++) {
+    if (u32(offset) !== 0x02014b50) break;
+    const method = u16(offset + 10), size = u32(offset + 20);
+    const nl = u16(offset + 28), el = u16(offset + 30), cl = u16(offset + 32), local = u32(offset + 42);
+    const name = decoder.decode(bytes.slice(offset + 46, offset + 46 + nl));
+    const dataStart = local + 30 + u16(local + 26) + u16(local + 28);
+    const compressed = bytes.slice(dataStart, dataStart + size);
+    if (method === 0) entries.set(name, compressed);
+    else if (method === 8) {
+      const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream('deflate-raw' as CompressionFormat));
+      entries.set(name, new Uint8Array(await new Response(stream).arrayBuffer()));
+    }
+    offset += 46 + nl + el + cl;
+  }
+  const getXml = (name: string) => entries.has(name) ? decoder.decode(entries.get(name)) : '';
+  const parser = new DOMParser();
+  const stringsXml = getXml('xl/sharedStrings.xml');
+  const strings = stringsXml ? Array.from(parser.parseFromString(stringsXml, 'application/xml').getElementsByTagName('si')).map(si =>
+    Array.from(si.getElementsByTagName('t')).map(t => t.textContent || '').join('')
+  ) : [];
+  const sheetName = [...entries.keys()].filter(name => /^xl\/worksheets\/sheet\d+\.xml$/.test(name)).sort()[0];
+  if (!sheetName) throw new Error('ไม่พบ worksheet ในไฟล์ Excel');
+  const doc = parser.parseFromString(getXml(sheetName), 'application/xml');
+  const rows: string[][] = [];
+  const columnIndex = (ref: string) => [...((ref.match(/^[A-Z]+/) || ['A'])[0])].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) - 1;
+  Array.from(doc.getElementsByTagName('row')).forEach(rowNode => {
+    const row: string[] = [];
+    Array.from(rowNode.children).filter(cell => cell.tagName === 'c').forEach(cell => {
+      const index = columnIndex(cell.getAttribute('r') || 'A1');
+      const type = cell.getAttribute('t') || '';
+      const v = cell.getElementsByTagName('v')[0];
+      let value = v?.textContent || '';
+      if (type === 's') value = strings[Number(value)] || '';
+      if (type === 'inlineStr') value = Array.from(cell.getElementsByTagName('t')).map(t => t.textContent || '').join('');
+      while (row.length <= index) row.push('');
+      row[index] = value;
+    });
+    if (row.some(value => value !== '')) rows.push(row);
+  });
+  return rows;
+}
+
+function parseDelimitedFile(input: string): string[][] {
+  const parse = (delimiter: string): string[][] => {
+    const records: string[][] = [];
+    let row: string[] = [], cell = '', quoted = false;
+    for (let i = 0; i < input.length; i++) {
+      const ch = input[i];
+      if (ch === '"') {
+        if (quoted && input[i + 1] === '"') { cell += '"'; i++; } else quoted = !quoted;
+      } else if (ch === delimiter && !quoted) { row.push(cell.trim()); cell = ''; }
+      else if ((ch === '\\n' || ch === '\\r') && !quoted) {
+        if (ch === '\\r' && input[i + 1] === '\\n') i++;
+        row.push(cell.trim()); if (row.some(v => v !== '')) records.push(row);
+        row = []; cell = '';
+      } else cell += ch;
+    }
+    row.push(cell.trim()); if (row.some(v => v !== '')) records.push(row);
+    return records;
+  };
+  return [',', '\\t', ';'].map(delimiter => {
+    const rows = parse(delimiter);
+    const widths = rows.slice(0, 20).map(row => row.filter(v => v !== '').length);
+    return { rows, score: widths.length ? Math.max(...widths) + (new Set(widths).size === 1 ? 2 : 0) : 0 };
+  }).sort((a, b) => b.score - a.score)[0]?.rows || [];
+}
+
 interface ImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   title: string;
   moduleName: string;
   expectedColumns: string[];
-  onImport: (rows: Record<string, string>[]) => { new: number; updated: number; skipped: number; rejected: number; errors: string[] };
+  onImport: (rows: Record<string, string>[], fileName?: string) => { new: number; updated: number; skipped: number; rejected: number; errors: string[] };
 }
 
 export function ImportModal({ isOpen, onClose, title, expectedColumns, onImport }: ImportModalProps) {
@@ -70,65 +153,49 @@ export function ImportModal({ isOpen, onClose, title, expectedColumns, onImport 
 
   if (!isOpen) return null;
 
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setFileName(file.name);
-
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const text = ev.target?.result as string;
-      const lines = text.split(/\r?\n/).filter(l => l.trim());
-      if (lines.length < 2) return;
-
-      // Parse CSV with proper handling of quoted values
-      const parseCSVLine = (line: string): string[] => {
-        const result: string[] = [];
-        let current = '';
-        let inQuotes = false;
-
-        for (let i = 0; i < line.length; i++) {
-          const char = line[i];
-          if (char === '"') {
-            inQuotes = !inQuotes;
-          } else if (char === ',' && !inQuotes) {
-            result.push(current.trim());
-            current = '';
-          } else {
-            current += char;
-          }
-        }
-        result.push(current.trim());
-        return result;
-      };
-
-      const headers = parseCSVLine(lines[0]).map(h => h.replace(/"/g, '').trim());
-      
-      // Debug: Log detected headers
-      console.log('📋 Detected CSV Headers:', headers);
-      console.log('📊 First row sample:', parseCSVLine(lines[1]));
-      
-      const rows = lines.slice(1).map(line => {
-        const values = parseCSVLine(line);
+    try {
+      const records = /\.xlsx?$/i.test(file.name)
+        ? await parseExcelFile(file)
+        : parseDelimitedFile((await file.text()).replace(/^\uFEFF/, ''));
+      if (records.length < 2) throw new Error('ไม่พบหัวตารางและข้อมูลอย่างน้อย 1 แถว');
+      const normalize = (value: string) => value.toLowerCase().replace(/^\uFEFF/, '').replace(/[^a-z0-9ก-๙]+/g, '');
+      const expected = expectedColumns.map(normalize);
+      let headerIndex = 0, bestScore = -Infinity;
+      for (let i = 0; i < Math.min(records.length - 1, 40); i++) {
+        const cells = records[i].map(v => v.trim()), populated = cells.filter(Boolean);
+        if (populated.length < 2) continue;
+        const uniqueRatio = new Set(populated.map(normalize)).size / populated.length;
+        const matches = populated.reduce((sum, value) => {
+          const key = normalize(value);
+          return sum + (expected.some(item => item && (key === item || key.includes(item) || item.includes(key))) ? 1 : 0);
+        }, 0);
+        const score = populated.length * 2 + uniqueRatio * 3 + matches * 5 - (cells.length - populated.length);
+        if (score > bestScore) { bestScore = score; headerIndex = i; }
+      }
+      const headers = records[headerIndex].map((h, i) => (h || `column_${i + 1}`).replace(/^\uFEFF/, '').trim());
+      const rows = records.slice(headerIndex + 1).map(values => {
         const row: Record<string, string> = {};
-        headers.forEach((h, i) => { 
-          const value = values[i] ? values[i].replace(/"/g, '').trim() : '';
-          row[h] = value;
-        });
+        headers.forEach((header, i) => { row[header] = (values[i] || '').trim(); });
         return row;
-      });
-      
-      console.log('📝 Parsed rows:', rows.length);
-      console.log('🔍 First row data:', rows[0]);
-      
+      }).filter(row => Object.values(row).some(value => value !== ''));
+      if (!rows.length) throw new Error('พบหัวตาราง แต่ไม่พบแถวข้อมูล');
       setParsedData(rows);
       setStep('preview');
-    };
-    reader.readAsText(file);
+    } catch (error) {
+      console.error('File import parsing failed:', error);
+      window.alert(`อ่านไฟล์ไม่สำเร็จ: ${error instanceof Error ? error.message : 'รูปแบบไฟล์ไม่ถูกต้อง'}`);
+      setFileName('');
+    } finally {
+      e.target.value = '';
+    }
   };
 
   const handleImport = () => {
-    const res = onImport(parsedData);
+    const res = onImport(parsedData, fileName);
     setResult(res);
     setStep('result');
   };
@@ -159,9 +226,9 @@ export function ImportModal({ isOpen, onClose, title, expectedColumns, onImport 
             <div className="text-center">
               <div className="border-2 border-dashed border-gray-300 rounded-xl p-12 hover:border-orange-400 transition-colors">
                 <Upload className="mx-auto text-gray-400 mb-4" size={48} />
-                <p className="text-gray-600 mb-2">Drop CSV file here or click to browse</p>
-                <p className="text-xs text-gray-400 mb-4">Supported: CSV files with headers</p>
-                <input ref={fileRef} type="file" accept=".csv" onChange={handleFile} className="hidden" />
+                <p className="text-gray-600 mb-2">Drop CSV or Excel file here or click to browse</p>
+                <p className="text-xs text-gray-400 mb-4">Supported: CSV / TSV / Excel (.xlsx); detects report header rows automatically</p>
+                <input ref={fileRef} type="file" accept=".csv,.tsv,.txt,.xlsx" onChange={handleFile} className="hidden" />
                 <button
                   onClick={() => fileRef.current?.click()}
                   className="bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-orange-600"

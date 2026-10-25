@@ -30,6 +30,7 @@ export interface AdvertisingPerformance {
   qualified_leads: number;
   source_file?: string;
   import_job_id?: string;
+  source_data_json?: string;
 }
 
 // ============ SOCIAL CONTENT ============
@@ -56,6 +57,7 @@ export interface SocialContent {
   leads_generated: number;
   source_file?: string;
   import_job_id?: string;
+  source_data_json?: string;
 }
 
 // ============ WEBSITE ANALYTICS ============
@@ -80,6 +82,7 @@ export interface WebsiteAnalytics {
   boq_upload: number;
   source_file?: string;
   import_job_id?: string;
+  source_data_json?: string;
 }
 
 // ============ CUSTOMERS / LEADS ============
@@ -132,6 +135,8 @@ export interface Lead {
   lost_reason?: string;
   quotation_id?: string;
   status_history: StatusHistoryEntry[];
+  source_file?: string;
+  source_data_json?: string;
 }
 
 export interface StatusHistoryEntry {
@@ -220,6 +225,8 @@ export interface SalesOrder {
   remark?: string;
   items: SalesItem[];
   created_at: string;
+  source_file?: string;
+  source_data_json?: string;
 }
 
 export interface SalesItem {
