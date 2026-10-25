@@ -74,6 +74,8 @@ export default function WebsiteAnalytics() {
       click_to_call: getNumber(r, ['click_to_call', 'Click to Call', 'clickToCall', 'calls', 'Calls']),
       line_clicks: getNumber(r, ['line_clicks', 'LINE Clicks', 'lineClicks', 'line', 'LINE']),
       product_inquiry: getNumber(r, ['product_inquiry', 'Product Inquiry', 'productInquiry', 'inquiries', 'Inquiries']),
+      source_file: sourceFileName,
+      source_data_json: JSON.stringify(r),
       boq_upload: getNumber(r, ['boq_upload', 'BOQ Upload', 'boqUpload', 'uploads', 'Uploads']),
     }));
     const result = addWebsite(items);
