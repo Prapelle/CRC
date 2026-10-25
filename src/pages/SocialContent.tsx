@@ -34,7 +34,7 @@ export default function SocialContent() {
 
   const topContent = [...filtered].sort((a, b) => b.reach - a.reach).slice(0, 5);
 
-  const handleImport = (rows: Record<string, string>[]) => {
+  const handleImport = (rows: Record<string, string>[], sourceFileName = 'import.csv') => {
     // Helper function to get value with multiple possible column names
     const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9ก-๙]/g, '');
     const getValue = (r: Record<string, string>, keys: string[]): string => {
@@ -72,7 +72,7 @@ export default function SocialContent() {
       leads_generated: getNumber(r, ['leads_generated', 'Leads', 'leads', 'lead']),
     }));
     const result = addSocial(items);
-    addImportJob({ job_id: `IJ_${Date.now()}`, module: 'Social Content', file_name: 'import.csv', file_size: 0, status: 'Completed', total_rows: rows.length, new_rows: result.new, updated_rows: result.updated, skipped_rows: result.skipped, rejected_rows: result.rejected, errors: result.errors.map(e => ({ row: 0, field: '', message: e })), created_at: new Date().toISOString(), created_by: 'Admin' });
+    addImportJob({ job_id: `IJ_${Date.now()}`, module: 'Social Content', file_name: sourceFileName, file_size: 0, status: 'Completed', total_rows: rows.length, new_rows: result.new, updated_rows: result.updated, skipped_rows: result.skipped, rejected_rows: result.rejected, errors: result.errors.map(e => ({ row: 0, field: '', message: e })), created_at: new Date().toISOString(), created_by: 'Admin' });
     return result;
   };
 
