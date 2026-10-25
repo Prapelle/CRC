@@ -56,42 +56,69 @@ export default function SalesManagement() {
       return '';
     };
 
+    const normalizeKey = (value: string) => value.toLowerCase().replace(/[^a-z0-9ก-๙]/g, '');
+    const value = (r: Record<string, string>, aliases: string[]): string => {
+      const direct = getValue(r, aliases);
+      if (direct) return direct;
+      const aliasKeys = aliases.map(normalizeKey);
+      return Object.entries(r).find(([key, v]) => v?.trim() && aliasKeys.includes(normalizeKey(key)))?.[1]?.trim() || '';
+    };
     const getNumber = (r: Record<string, string>, keys: string[]): number => {
-      const value = getValue(r, keys);
-      const num = parseFloat(value);
-      return isNaN(num) ? 0 : num;
+      const raw = value(r, keys);
+      const cleaned = raw.replace(/THB|฿|บาท/gi, '').replace(/,/g, '').replace(/[^0-9.\-]/g, '');
+      const num = Number(cleaned);
+      return cleaned !== '' && Number.isFinite(num) ? num : 0;
+    };
+    const getDate = (r: Record<string, string>, keys: string[]): string => {
+      const raw = value(r, keys);
+      if (!raw) return '';
+      // Supports YYYY-MM-DD, DD/MM/YYYY and DD-MM-YYYY. Preserve ISO dates unchanged.
+      if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+      const match = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+      if (match) {
+        let day = Number(match[1]), month = Number(match[2]), year = Number(match[3]);
+        if (year > 2400) year -= 543;
+        if (day <= 12 && month > 12) [day, month] = [month, day];
+        return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      }
+      return raw;
     };
 
     const items = rows.map(r => {
-      const customerName = getValue(r, ['customer_name', 'Customer', 'customer', 'name', 'Name', 'company', 'Company']);
-      const subtotal = getNumber(r, ['subtotal', 'Subtotal', 'sub_total']);
-      
+      const customerName = value(r, ['customer_name', 'Customer', 'customer', 'name', 'Name', 'company', 'Company', 'ชื่อลูกค้า', 'ชื่อลูกค้า/บริษัท', 'ชื่อลูกค้า/ชื่อบริษัท']);
+      const orderNumber = value(r, ['order_number', 'Order #', 'order', 'Order', 'orderNumber', 'เลขที่เอกสาร', 'เลขที่ใบกำกับภาษี', 'เลขที่ใบเสร็จ', 'เลขที่ใบส่งของ']);
+      const subtotal = getNumber(r, ['subtotal', 'Subtotal', 'sub_total', 'ยอดก่อนภาษี', 'มูลค่าสินค้า', 'รวมเป็นเงิน', 'จำนวนเงิน']);
+      const grandTotal = getNumber(r, ['grand_total', 'Total', 'total', 'amount', 'ยอดสุทธิ', 'ยอดรวมสุทธิ', 'รวมทั้งสิ้น', 'ยอดรวม']);
+      const netSales = getNumber(r, ['net_sales', 'Net Sales', 'net', 'ยอดขายสุทธิ', 'ยอดสุทธิ', 'รวมทั้งสิ้น']) || grandTotal || subtotal;
+      // Ignore report footers/totals and blank rows; do not create fake orders for them.
+      if (!customerName && !orderNumber) return null;
+      if (/^(รวม|total|grand total|ยอดรวม)$/i.test(customerName.trim()) || /^(รวม|total|grand total|ยอดรวม)$/i.test(orderNumber.trim())) return null;
       return {
         sales_id: '',
-        order_number: getValue(r, ['order_number', 'Order #', 'order', 'Order', 'orderNumber']),
-        invoice_number: getValue(r, ['invoice_number', 'Invoice #', 'invoice', 'Invoice']) || undefined,
-        quotation_id: getValue(r, ['quotation_id', 'Quotation ID', 'quotation']) || undefined,
-        lead_id: getValue(r, ['lead_id', 'Lead ID', 'lead']) || undefined,
+        order_number: orderNumber,
+        invoice_number: value(r, ['invoice_number', 'Invoice #', 'invoice', 'Invoice', 'เลขที่ใบกำกับภาษี', 'เลขที่เอกสาร']) || undefined,
+        quotation_id: value(r, ['quotation_id', 'Quotation ID', 'quotation']) || undefined,
+        lead_id: value(r, ['lead_id', 'Lead ID', 'lead']) || undefined,
         customer_name: customerName,
-        customer_type: (getValue(r, ['customer_type', 'Customer Type', 'type', 'Type']) || 'ลูกค้าทั่วไป') as any,
-        order_date: getValue(r, ['order_date', 'Date', 'date', 'orderDate']) || new Date().toISOString().split('T')[0],
-        sales_channel: getValue(r, ['sales_channel', 'Channel', 'channel', 'source', 'Source']) || 'Direct',
-        salesperson: getValue(r, ['salesperson', 'Salesperson', 'sales_person', 'assigned_to']),
-        order_status: (getValue(r, ['order_status', 'Status', 'status']) || 'Confirmed') as OrderStatus,
-        payment_status: (getValue(r, ['payment_status', 'Payment', 'payment']) || 'Unpaid') as PaymentStatus,
-        shipping_fee: getNumber(r, ['shipping_fee', 'Shipping', 'shipping', 'delivery']),
-        subtotal: subtotal,
-        discount: getNumber(r, ['discount', 'Discount']),
-        tax_amount: getNumber(r, ['tax', 'Tax', 'tax_amount', 'vat']),
-        grand_total: getNumber(r, ['grand_total', 'Total', 'total', 'amount']),
-        net_sales: getNumber(r, ['net_sales', 'Net Sales', 'net']) || subtotal,
-        cost_of_goods_sold: getNumber(r, ['cogs', 'COGS', 'cost', 'cost_of_goods_sold']) || undefined,
-        gross_profit: getNumber(r, ['gross_profit', 'Profit', 'profit']) || undefined,
-        marketing_source: getValue(r, ['marketing_source', 'Source', 'source', 'marketing']) || undefined,
+        customer_type: (value(r, ['customer_type', 'Customer Type', 'type', 'Type', 'ประเภทลูกค้า']) || 'ลูกค้าทั่วไป') as any,
+        order_date: getDate(r, ['order_date', 'Date', 'date', 'orderDate', 'วัน/เดือน/ปี', 'วันที่', 'วันที่เอกสาร']) || new Date().toISOString().split('T')[0],
+        sales_channel: value(r, ['sales_channel', 'Channel', 'channel', 'source', 'Source', 'ช่องทางการขาย']) || 'Direct',
+        salesperson: value(r, ['salesperson', 'Salesperson', 'sales_person', 'assigned_to', 'พนักงานขาย', 'ผู้ขาย']),
+        order_status: (value(r, ['order_status', 'Status', 'status', 'สถานะ']) || 'Confirmed') as OrderStatus,
+        payment_status: (value(r, ['payment_status', 'Payment', 'payment', 'สถานะชำระเงิน']) || 'Unpaid') as PaymentStatus,
+        shipping_fee: getNumber(r, ['shipping_fee', 'Shipping', 'shipping', 'delivery', 'ค่าขนส่ง']),
+        subtotal,
+        discount: getNumber(r, ['discount', 'Discount', 'ส่วนลด']),
+        tax_amount: getNumber(r, ['tax', 'Tax', 'tax_amount', 'vat', 'ภาษีมูลค่าเพิ่ม', 'VAT']),
+        grand_total: grandTotal || netSales,
+        net_sales: netSales,
+        cost_of_goods_sold: getNumber(r, ['cogs', 'COGS', 'cost', 'cost_of_goods_sold', 'ต้นทุนสินค้า']) || undefined,
+        gross_profit: getNumber(r, ['gross_profit', 'Profit', 'profit', 'กำไรขั้นต้น']) || undefined,
+        marketing_source: value(r, ['marketing_source', 'Source', 'source', 'marketing', 'แหล่งที่มา']) || undefined,
         items: [],
         created_at: new Date().toISOString(),
       };
-    });
+    }).filter((item): item is NonNullable<typeof item> => item !== null);
     const result = addSales(items);
     addImportJob({ job_id: `IJ_${Date.now()}`, module: 'Sales', file_name: 'import.csv', file_size: 0, status: 'Completed', total_rows: rows.length, new_rows: result.new, updated_rows: result.updated, skipped_rows: result.skipped, rejected_rows: result.rejected, errors: result.errors.map(e => ({ row: 0, field: '', message: e })), created_at: new Date().toISOString(), created_by: 'Admin' });
     return result;
