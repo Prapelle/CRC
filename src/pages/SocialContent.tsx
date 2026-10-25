@@ -69,6 +69,8 @@ export default function SocialContent() {
       shares: getNumber(r, ['shares', 'Shares', 'share', 'Post shares']),
       link_clicks: getNumber(r, ['link_clicks', 'Link Clicks', 'linkClicks', 'clicks', 'Clicks', 'Post link clicks', 'Link clicks']),
       video_views: getNumber(r, ['video_views', 'Video Views', 'videoViews', 'views', 'Views', '3-second video views', 'Video views']),
+      source_file: sourceFileName,
+      source_data_json: JSON.stringify(r),
       leads_generated: getNumber(r, ['leads_generated', 'Leads', 'leads', 'lead']),
     }));
     const result = addSocial(items);
