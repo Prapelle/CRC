@@ -223,8 +223,6 @@ export interface SalesOrder {
   marketing_source?: string;
   campaign_id?: string;
   remark?: string;
-  source_file?: string;
-  source_data_json?: string;
   items: SalesItem[];
   created_at: string;
   source_file?: string;
