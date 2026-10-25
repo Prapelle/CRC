@@ -21,12 +21,19 @@ const AuthContext = createContext<AuthContextType>({
 const ADMIN_EMAIL = 'jsuparkit@gmail.com';
 const roles: UserRole[] = ['Admin', 'Marketing', 'Sales', 'Management', 'Data Analyst'];
 
-function mapUser(authUser: { id: string; email?: string; user_metadata?: Record<string, unknown> }): User {
+function mapUser(authUser: {
+  id: string;
+  email?: string;
+  user_metadata?: Record<string, unknown>;
+  app_metadata?: Record<string, unknown>;
+}): User {
   const email = authUser.email ?? '';
-  const metadataRole = authUser.user_metadata?.role;
-  const role: UserRole = email.toLowerCase() === ADMIN_EMAIL
-    ? 'Admin'
-    : (roles.includes(metadataRole as UserRole) && metadataRole !== 'Admin' ? metadataRole as UserRole : 'Sales');
+  // app_metadata is managed by trusted server-side/admin actions; user_metadata can be changed by the user.
+  const metadataRole = authUser.app_metadata?.role;
+  const allowedRole = roles.includes(metadataRole as UserRole) && metadataRole !== 'Admin'
+    ? metadataRole as UserRole
+    : 'Sales';
+  const role: UserRole = email.toLowerCase() === ADMIN_EMAIL ? 'Admin' : allowedRole;
   return {
     user_id: authUser.id,
     username: email,
