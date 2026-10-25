@@ -111,28 +111,60 @@ async function parseExcelFile(file: File): Promise<string[][]> {
 }
 
 function parseDelimitedFile(input: string): string[][] {
+  // Normalize a UTF-8 BOM without changing newlines inside quoted fields.
+  const text = input.replace(/^\uFEFF/, '');
   const parse = (delimiter: string): string[][] => {
     const records: string[][] = [];
-    let row: string[] = [], cell = '', quoted = false;
-    for (let i = 0; i < input.length; i++) {
-      const ch = input[i];
+    let row: string[] = [];
+    let cell = '';
+    let quoted = false;
+
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+
       if (ch === '"') {
-        if (quoted && input[i + 1] === '"') { cell += '"'; i++; } else quoted = !quoted;
-      } else if (ch === delimiter && !quoted) { row.push(cell.trim()); cell = ''; }
-      else if ((ch === '\\n' || ch === '\\r') && !quoted) {
-        if (ch === '\\r' && input[i + 1] === '\\n') i++;
-        row.push(cell.trim()); if (row.some(v => v !== '')) records.push(row);
-        row = []; cell = '';
-      } else cell += ch;
+        if (quoted && text[i + 1] === '"') {
+          cell += '"';
+          i++;
+        } else {
+          quoted = !quoted;
+        }
+      } else if (ch === delimiter && !quoted) {
+        row.push(cell.trim());
+        cell = '';
+      } else if ((ch === '\n' || ch === '\r') && !quoted) {
+        if (ch === '\r' && text[i + 1] === '\n') i++;
+        row.push(cell.trim());
+        if (row.some(value => value !== '')) records.push(row);
+        row = [];
+        cell = '';
+      } else {
+        // Preserve commas/newlines inside quoted fields as literal content.
+        cell += ch;
+      }
     }
-    row.push(cell.trim()); if (row.some(v => v !== '')) records.push(row);
+
+    row.push(cell.trim());
+    if (row.some(value => value !== '')) records.push(row);
     return records;
   };
-  return [',', '\\t', ';'].map(delimiter => {
-    const rows = parse(delimiter);
-    const widths = rows.slice(0, 20).map(row => row.filter(v => v !== '').length);
-    return { rows, score: widths.length ? Math.max(...widths) + (new Set(widths).size === 1 ? 2 : 0) : 0 };
-  }).sort((a, b) => b.score - a.score)[0]?.rows || [];
+
+  // Select the delimiter producing the most consistent multi-column records.
+  return [',', '\t', ';']
+    .map(delimiter => {
+      const rows = parse(delimiter);
+      const widths = rows.slice(0, 30).map(row => row.length);
+      const multiColumnRows = widths.filter(width => width > 1).length;
+      const maxWidth = widths.length ? Math.max(...widths) : 0;
+      const consistency = widths.length
+        ? widths.filter(width => width === maxWidth).length / widths.length
+        : 0;
+      return {
+        rows,
+        score: (maxWidth > 1 ? maxWidth * 10 : 0) + multiColumnRows + consistency * 5,
+      };
+    })
+    .sort((a, b) => b.score - a.score)[0]?.rows || [];
 }
 
 interface ImportModalProps {
