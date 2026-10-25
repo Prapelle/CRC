@@ -36,41 +36,39 @@ export default function SocialContent() {
 
   const handleImport = (rows: Record<string, string>[]) => {
     // Helper function to get value with multiple possible column names
+    const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9ก-๙]/g, '');
     const getValue = (r: Record<string, string>, keys: string[]): string => {
-      for (const key of keys) {
-        const value = r[key];
-        if (value && value.trim() !== '') {
-          return value.trim();
-        }
-      }
-      return '';
+      for (const key of keys) if (r[key]?.trim()) return r[key].trim();
+      const aliases = keys.map(normalize);
+      const found = Object.entries(r).find(([key, value]) => value?.trim() && aliases.some(alias => normalize(key) === alias || normalize(key).startsWith(alias)));
+      return found?.[1]?.trim() || '';
     };
 
     const getNumber = (r: Record<string, string>, keys: string[]): number => {
-      const value = getValue(r, keys);
-      const num = parseInt(value);
-      return isNaN(num) ? 0 : num;
+      const raw = getValue(r, keys).replace(/,/g, '').replace(/%/g, '').trim();
+      const num = Number(raw.replace(/[^0-9.\-]/g, ''));
+      return raw !== '' && Number.isFinite(num) ? num : 0;
     };
 
     const items = rows.map(r => ({
       id: '',
       platform: getValue(r, ['platform', 'Platform', 'source', 'Source']) || 'Facebook',
       page_id: getValue(r, ['page_id', 'Page ID', 'pageId']),
-      page_name: getValue(r, ['page_name', 'Page Name', 'pageName', 'page']),
-      post_id: getValue(r, ['post_id', 'Post ID', 'postId', 'post']),
-      post_url: getValue(r, ['post_url', 'Post URL', 'postUrl', 'url', 'URL']),
-      post_date: getValue(r, ['post_date', 'Post Date', 'postDate', 'date', 'Date']),
+      page_name: getValue(r, ['page_name', 'Page Name', 'pageName', 'page', 'Page name']),
+      post_id: getValue(r, ['post_id', 'Post ID', 'postId', 'post', 'Post ID']),
+      post_url: getValue(r, ['post_url', 'Post URL', 'postUrl', 'url', 'URL', 'Permalink', 'Post link']),
+      post_date: getValue(r, ['post_date', 'Post Date', 'postDate', 'date', 'Date', 'Publish time', 'Published']),
       metric_date: getValue(r, ['metric_date', 'Metric Date', 'metricDate']),
-      content_type: getValue(r, ['content_type', 'Content Type', 'contentType', 'type', 'Type']),
-      content_category: getValue(r, ['content_category', 'Content Category', 'contentCategory', 'category', 'Category']),
-      reach: getNumber(r, ['reach', 'Reach']),
-      impressions: getNumber(r, ['impressions', 'Impressions']),
-      engagement: getNumber(r, ['engagement', 'Engagement', 'engagements']),
-      reactions: getNumber(r, ['reactions', 'Reactions', 'reaction', 'likes', 'Likes']),
-      comments: getNumber(r, ['comments', 'Comments', 'comment']),
-      shares: getNumber(r, ['shares', 'Shares', 'share']),
-      link_clicks: getNumber(r, ['link_clicks', 'Link Clicks', 'linkClicks', 'clicks', 'Clicks']),
-      video_views: getNumber(r, ['video_views', 'Video Views', 'videoViews', 'views', 'Views']),
+      content_type: getValue(r, ['content_type', 'Content Type', 'contentType', 'type', 'Type', 'Media type', 'Post type']),
+      content_category: getValue(r, ['content_category', 'Content Category', 'contentCategory', 'category', 'Category', 'Title', 'Post title']),
+      reach: getNumber(r, ['reach', 'Reach', 'Post reach', 'Reach (total)']),
+      impressions: getNumber(r, ['impressions', 'Impressions', 'Post impressions', 'Views']),
+      engagement: getNumber(r, ['engagement', 'Engagement', 'engagements', 'Post engagements', 'Interactions']),
+      reactions: getNumber(r, ['reactions', 'Reactions', 'reaction', 'likes', 'Likes', 'Post reactions', 'Reactions, comments and shares']),
+      comments: getNumber(r, ['comments', 'Comments', 'comment', 'Post comments']),
+      shares: getNumber(r, ['shares', 'Shares', 'share', 'Post shares']),
+      link_clicks: getNumber(r, ['link_clicks', 'Link Clicks', 'linkClicks', 'clicks', 'Clicks', 'Post link clicks', 'Link clicks']),
+      video_views: getNumber(r, ['video_views', 'Video Views', 'videoViews', 'views', 'Views', '3-second video views', 'Video views']),
       leads_generated: getNumber(r, ['leads_generated', 'Leads', 'leads', 'lead']),
     }));
     const result = addSocial(items);
