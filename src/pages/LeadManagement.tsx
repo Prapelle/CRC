@@ -66,6 +66,8 @@ export default function LeadManagement() {
         lead_status: 'New Lead' as LeadStatus,
         lead_temperature: 'Warm' as LeadTemperature,
         assigned_to: getValue(['assigned_to', 'Assigned To', 'assignee', 'Assignee', 'salesperson', 'Salesperson', 'พนักงานขาย', 'ผู้รับผิดชอบ']) || user?.full_name || '',
+        source_file: sourceFileName,
+        source_data_json: JSON.stringify(r),
         status_history: [{ date: new Date().toISOString().split('T')[0], from_status: '', to_status: 'New Lead', changed_by: user?.full_name || 'System' }],
       };
     });
