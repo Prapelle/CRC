@@ -62,6 +62,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [dataLoadError, setDataLoadError] = useState('');
   const [loadedUserId, setLoadedUserId] = useState<string | null>(null);
   const lastUpdatedAtRef = useRef<string | null>(null);
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const dataReady = Boolean(user && loadedUserId === user.user_id && lastUpdatedAtRef.current && !dataLoading && !dataLoadError);
 
   const refresh = useCallback(async () => {
@@ -161,39 +162,43 @@ export function DataProvider({ children }: { children: ReactNode }) {
       console.error('Shared CRC data is not ready; the change was not saved.');
       return;
     }
-    const previousUpdatedAt = lastUpdatedAtRef.current;
+    const client = supabase;
+    const currentUserId = user.user_id;
     const nextData = { ...newData, users: [] };
-    const nextUpdatedAt = new Date(Math.max(Date.now(), Date.parse(previousUpdatedAt) + 1)).toISOString();
-
     setData(nextData);
-    void supabase
-      .from('crc_dashboard_state')
-      .update({
-        payload: JSON.parse(JSON.stringify(nextData)),
-        updated_at: nextUpdatedAt,
-        updated_by: user.user_id,
-      })
-      .eq('id', 'shared')
-      .eq('updated_at', previousUpdatedAt)
-      .select('updated_at')
-      .maybeSingle()
-      .then(({ data: savedRow, error }) => {
-        if (error) {
-          console.error('Failed to save shared CRC data:', error.message);
-          setDataLoadError(`บันทึกข้อมูลส่วนกลางไม่สำเร็จ: ${error.message}`);
-          setLoadedUserId(null);
-          return;
-        }
-        if (!savedRow?.updated_at) {
-          const message = 'ข้อมูลส่วนกลางถูกอัปเดตจากอีกเซสชันแล้ว กรุณาโหลดข้อมูลใหม่ก่อนแก้ไขต่อ';
-          console.warn(message);
-          setDataLoadError(message);
-          setLoadedUserId(null);
-          lastUpdatedAtRef.current = null;
-          return;
-        }
-        lastUpdatedAtRef.current = savedRow.updated_at;
-      });
+
+    // Serialize writes from this browser session, while the updated_at condition
+    // prevents a stale session from silently replacing another user's changes.
+    saveQueueRef.current = saveQueueRef.current.then(async () => {
+      const previousUpdatedAt = lastUpdatedAtRef.current;
+      if (!previousUpdatedAt) {
+        throw new Error('Shared data version is unknown; reload before saving again.');
+      }
+      const nextUpdatedAt = new Date(Math.max(Date.now(), Date.parse(previousUpdatedAt) + 1)).toISOString();
+      const { data: savedRow, error } = await client
+        .from('crc_dashboard_state')
+        .update({
+          payload: JSON.parse(JSON.stringify(nextData)),
+          updated_at: nextUpdatedAt,
+          updated_by: currentUserId,
+        })
+        .eq('id', 'shared')
+        .eq('updated_at', previousUpdatedAt)
+        .select('updated_at')
+        .maybeSingle();
+
+      if (error) throw new Error(error.message);
+      if (!savedRow?.updated_at) {
+        throw new Error('ข้อมูลส่วนกลางถูกอัปเดตจากอีกเซสชันแล้ว กรุณาโหลดข้อมูลใหม่ก่อนแก้ไขต่อ');
+      }
+      lastUpdatedAtRef.current = savedRow.updated_at;
+    }).catch((error) => {
+      const detail = error instanceof Error ? error.message : 'Unknown database error';
+      console.error('Failed to save shared CRC data:', detail);
+      lastUpdatedAtRef.current = null;
+      setDataLoadError(`บันทึกข้อมูลส่วนกลางไม่สำเร็จ: ${detail}`);
+      setLoadedUserId(null);
+    });
   };
 
   const addCampaign = (c: Campaign) => {
