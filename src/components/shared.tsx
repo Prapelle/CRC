@@ -80,13 +80,13 @@ export function ImportModal({ isOpen, onClose, title, expectedColumns, onImport 
       const text = ev.target?.result as string;
       const lines = text.split(/\r?\n/).filter(l => l.trim());
       if (lines.length < 2) return;
-      
+
       // Parse CSV with proper handling of quoted values
       const parseCSVLine = (line: string): string[] => {
         const result: string[] = [];
         let current = '';
         let inQuotes = false;
-        
+
         for (let i = 0; i < line.length; i++) {
           const char = line[i];
           if (char === '"') {

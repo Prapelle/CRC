@@ -293,7 +293,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const getQualityIssues = (): DataQualityIssue[] => {
     const issues: DataQualityIssue[] = [];
-    
+
     data.leads.forEach((l: Lead) => {
       if (!l.phone) issues.push({ id: generateId(), module: 'Leads', record_id: l.lead_id, record_type: 'Lead', issue_type: 'Missing Phone', severity: 'High', description: `Lead "${l.customer_name}" has no phone number`, created_at: l.created_at, resolved: false });
       if (!l.assigned_to) issues.push({ id: generateId(), module: 'Leads', record_id: l.lead_id, record_type: 'Lead', issue_type: 'No Assignee', severity: 'Medium', description: `Lead "${l.customer_name}" has no assigned salesperson`, created_at: l.created_at, resolved: false });
