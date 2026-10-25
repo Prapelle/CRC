@@ -90,46 +90,22 @@ interface DataStore {
 
 function getDefaultStore(): DataStore {
   return {
-    campaigns: DEMO_CAMPAIGNS,
-    ads: DEMO_ADS,
-    social: DEMO_SOCIAL,
-    website: DEMO_WEBSITE,
-    leads: DEMO_LEADS,
-    quotations: DEMO_QUOTATIONS,
-    sales: DEMO_SALES,
-    importJobs: DEMO_IMPORT_JOBS,
-    users: DEMO_USERS,
-    initialized: true,
+    campaigns: [], ads: [], social: [], website: [], leads: [],
+    quotations: [], sales: [], importJobs: [], users: [], initialized: true,
   };
 }
 
+// Local demo data is intentionally not loaded or migrated. The shared database is the source of truth.
 export function loadData(): DataStore {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as DataStore;
-      if (parsed.initialized) return parsed;
-    }
-  } catch (e) {
-    console.error('Failed to load data:', e);
-  }
-  const defaultData = getDefaultStore();
-  saveData(defaultData);
-  return defaultData;
+  return getDefaultStore();
 }
 
-export function saveData(data: DataStore): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  } catch (e) {
-    console.error('Failed to save data:', e);
-  }
+export function saveData(_data: DataStore): void {
+  // Persistence is handled by DataContext through Supabase.
 }
 
 export function resetData(): DataStore {
-  const defaultData = getDefaultStore();
-  saveData(defaultData);
-  return defaultData;
+  return getDefaultStore();
 }
 
 export function generateId(prefix: string = ''): string {
