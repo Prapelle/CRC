@@ -35,26 +35,43 @@ export default function SocialContent() {
   const topContent = [...filtered].sort((a, b) => b.reach - a.reach).slice(0, 5);
 
   const handleImport = (rows: Record<string, string>[]) => {
+    // Helper function to get value with multiple possible column names
+    const getValue = (r: Record<string, string>, keys: string[]): string => {
+      for (const key of keys) {
+        const value = r[key];
+        if (value && value.trim() !== '') {
+          return value.trim();
+        }
+      }
+      return '';
+    };
+
+    const getNumber = (r: Record<string, string>, keys: string[]): number => {
+      const value = getValue(r, keys);
+      const num = parseInt(value);
+      return isNaN(num) ? 0 : num;
+    };
+
     const items = rows.map(r => ({
       id: '',
-      platform: r['platform'] || r['Platform'] || 'Facebook',
-      page_id: r['page_id'] || r['Page ID'] || '',
-      page_name: r['page_name'] || r['Page Name'] || '',
-      post_id: r['post_id'] || r['Post ID'] || '',
-      post_url: r['post_url'] || r['Post URL'] || '',
-      post_date: r['post_date'] || r['Post Date'] || '',
-      metric_date: r['metric_date'] || r['Metric Date'] || '',
-      content_type: r['content_type'] || r['Content Type'] || '',
-      content_category: r['content_category'] || r['Content Category'] || '',
-      reach: parseInt(r['reach'] || r['Reach'] || '0'),
-      impressions: parseInt(r['impressions'] || r['Impressions'] || '0'),
-      engagement: parseInt(r['engagement'] || r['Engagement'] || '0'),
-      reactions: parseInt(r['reactions'] || r['Reactions'] || '0'),
-      comments: parseInt(r['comments'] || r['Comments'] || '0'),
-      shares: parseInt(r['shares'] || r['Shares'] || '0'),
-      link_clicks: parseInt(r['link_clicks'] || r['Link Clicks'] || '0'),
-      video_views: parseInt(r['video_views'] || r['Video Views'] || '0'),
-      leads_generated: parseInt(r['leads_generated'] || r['Leads'] || '0'),
+      platform: getValue(r, ['platform', 'Platform', 'source', 'Source']) || 'Facebook',
+      page_id: getValue(r, ['page_id', 'Page ID', 'pageId']),
+      page_name: getValue(r, ['page_name', 'Page Name', 'pageName', 'page']),
+      post_id: getValue(r, ['post_id', 'Post ID', 'postId', 'post']),
+      post_url: getValue(r, ['post_url', 'Post URL', 'postUrl', 'url', 'URL']),
+      post_date: getValue(r, ['post_date', 'Post Date', 'postDate', 'date', 'Date']),
+      metric_date: getValue(r, ['metric_date', 'Metric Date', 'metricDate']),
+      content_type: getValue(r, ['content_type', 'Content Type', 'contentType', 'type', 'Type']),
+      content_category: getValue(r, ['content_category', 'Content Category', 'contentCategory', 'category', 'Category']),
+      reach: getNumber(r, ['reach', 'Reach']),
+      impressions: getNumber(r, ['impressions', 'Impressions']),
+      engagement: getNumber(r, ['engagement', 'Engagement', 'engagements']),
+      reactions: getNumber(r, ['reactions', 'Reactions', 'reaction', 'likes', 'Likes']),
+      comments: getNumber(r, ['comments', 'Comments', 'comment']),
+      shares: getNumber(r, ['shares', 'Shares', 'share']),
+      link_clicks: getNumber(r, ['link_clicks', 'Link Clicks', 'linkClicks', 'clicks', 'Clicks']),
+      video_views: getNumber(r, ['video_views', 'Video Views', 'videoViews', 'views', 'Views']),
+      leads_generated: getNumber(r, ['leads_generated', 'Leads', 'leads', 'lead']),
     }));
     const result = addSocial(items);
     addImportJob({ job_id: `IJ_${Date.now()}`, module: 'Social Content', file_name: 'import.csv', file_size: 0, status: 'Completed', total_rows: rows.length, new_rows: result.new, updated_rows: result.updated, skipped_rows: result.skipped, rejected_rows: result.rejected, errors: result.errors.map(e => ({ row: 0, field: '', message: e })), created_at: new Date().toISOString(), created_by: 'Admin' });

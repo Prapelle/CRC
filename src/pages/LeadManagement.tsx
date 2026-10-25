@@ -39,23 +39,36 @@ export default function LeadManagement() {
   };
 
   const handleImport = (rows: Record<string, string>[]) => {
-    const leads: Lead[] = rows.map(r => ({
-      lead_id: '',
-      created_at: new Date().toISOString().split('T')[0],
-      inquiry_date: r['inquiry_date'] || r['Date'] || new Date().toISOString().split('T')[0],
-      source: r['source'] || r['Source'] || 'Other',
-      customer_type: (r['customer_type'] || r['Customer Type'] || 'ลูกค้าทั่วไป') as CustomerType,
-      customer_name: r['customer_name'] || r['Customer Name'] || r['Company'] || '',
-      contact_person: r['contact_person'] || r['Contact'] || '',
-      phone: r['phone'] || r['Phone'] || '',
-      email: r['email'] || r['Email'] || '',
-      product_category: r['product_category'] || r['Product'] || '',
-      steel_type: r['steel_type'] || r['Steel Type'] || '',
-      lead_status: 'New Lead' as LeadStatus,
-      lead_temperature: 'Warm' as LeadTemperature,
-      assigned_to: r['assigned_to'] || r['Assigned To'] || user?.full_name || '',
-      status_history: [{ date: new Date().toISOString().split('T')[0], from_status: '', to_status: 'New Lead', changed_by: user?.full_name || 'System' }],
-    }));
+    const leads: Lead[] = rows.map(r => {
+      // Helper function to get value with multiple possible column names
+      const getValue = (keys: string[]): string => {
+        for (const key of keys) {
+          const value = r[key];
+          if (value && value.trim() !== '') {
+            return value.trim();
+          }
+        }
+        return '';
+      };
+
+      return {
+        lead_id: '',
+        created_at: new Date().toISOString().split('T')[0],
+        inquiry_date: getValue(['inquiry_date', 'Date', 'date', 'Inquiry Date', 'inquiryDate']) || new Date().toISOString().split('T')[0],
+        source: getValue(['source', 'Source', 'lead_source', 'Lead Source']) || 'Other',
+        customer_type: (getValue(['customer_type', 'Customer Type', 'type', 'Type']) || 'ลูกค้าทั่วไป') as CustomerType,
+        customer_name: getValue(['customer_name', 'Customer Name', 'Company', 'company', 'name', 'Name', 'customer', 'Customer']),
+        contact_person: getValue(['contact_person', 'Contact', 'contact', 'Contact Person', 'contactPerson']),
+        phone: getValue(['phone', 'Phone', 'tel', 'Tel', 'telephone', 'Telephone', 'mobile', 'Mobile']),
+        email: getValue(['email', 'Email', 'e-mail', 'E-mail']),
+        product_category: getValue(['product_category', 'Product', 'product', 'category', 'Category']),
+        steel_type: getValue(['steel_type', 'Steel Type', 'steel', 'Steel', 'product_type', 'Product Type']),
+        lead_status: 'New Lead' as LeadStatus,
+        lead_temperature: 'Warm' as LeadTemperature,
+        assigned_to: getValue(['assigned_to', 'Assigned To', 'assignee', 'Assignee', 'salesperson', 'Salesperson']) || user?.full_name || '',
+        status_history: [{ date: new Date().toISOString().split('T')[0], from_status: '', to_status: 'New Lead', changed_by: user?.full_name || 'System' }],
+      };
+    });
     const result = addLeads(leads);
     addImportJob({ job_id: `IJ_${Date.now()}`, module: 'Leads', file_name: 'import.csv', file_size: 0, status: 'Completed', total_rows: rows.length, new_rows: result.new, updated_rows: result.updated, skipped_rows: result.skipped, rejected_rows: result.rejected, errors: result.errors.map(e => ({ row: 0, field: '', message: e })), created_at: new Date().toISOString(), created_by: user?.full_name || 'Admin' });
     return result;

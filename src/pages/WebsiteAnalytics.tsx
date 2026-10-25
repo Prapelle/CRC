@@ -39,25 +39,42 @@ export default function WebsiteAnalytics() {
   ).map(([name, d]) => ({ name, ...d })).sort((a, b) => b.sessions - a.sessions);
 
   const handleImport = (rows: Record<string, string>[]) => {
+    // Helper function to get value with multiple possible column names
+    const getValue = (r: Record<string, string>, keys: string[]): string => {
+      for (const key of keys) {
+        const value = r[key];
+        if (value && value.trim() !== '') {
+          return value.trim();
+        }
+      }
+      return '';
+    };
+
+    const getNumber = (r: Record<string, string>, keys: string[]): number => {
+      const value = getValue(r, keys);
+      const num = parseFloat(value);
+      return isNaN(num) ? 0 : num;
+    };
+
     const items = rows.map(r => ({
       id: '',
-      date: r['date'] || r['Date'] || '',
-      source: r['source'] || r['Source'] || '',
-      medium: r['medium'] || r['Medium'] || '',
-      campaign: r['campaign'] || r['Campaign'] || '',
-      landing_page: r['landing_page'] || r['Landing Page'] || '',
-      sessions: parseInt(r['sessions'] || r['Sessions'] || '0'),
-      users: parseInt(r['users'] || r['Users'] || '0'),
-      new_users: parseInt(r['new_users'] || r['New Users'] || '0'),
-      engaged_sessions: parseInt(r['engaged_sessions'] || r['Engaged Sessions'] || '0'),
-      engagement_rate: parseFloat(r['engagement_rate'] || r['Engagement Rate'] || '0'),
-      page_views: parseInt(r['page_views'] || r['Page Views'] || '0'),
-      key_events: parseInt(r['key_events'] || r['Key Events'] || '0'),
-      form_submissions: parseInt(r['form_submissions'] || r['Form Submissions'] || '0'),
-      click_to_call: parseInt(r['click_to_call'] || r['Click to Call'] || '0'),
-      line_clicks: parseInt(r['line_clicks'] || r['LINE Clicks'] || '0'),
-      product_inquiry: parseInt(r['product_inquiry'] || r['Product Inquiry'] || '0'),
-      boq_upload: parseInt(r['boq_upload'] || r['BOQ Upload'] || '0'),
+      date: getValue(r, ['date', 'Date', 'day', 'Day']),
+      source: getValue(r, ['source', 'Source', 'traffic_source']),
+      medium: getValue(r, ['medium', 'Medium']),
+      campaign: getValue(r, ['campaign', 'Campaign']),
+      landing_page: getValue(r, ['landing_page', 'Landing Page', 'landingPage', 'page', 'Page', 'url', 'URL']),
+      sessions: getNumber(r, ['sessions', 'Sessions', 'session']),
+      users: getNumber(r, ['users', 'Users', 'user']),
+      new_users: getNumber(r, ['new_users', 'New Users', 'newUsers']),
+      engaged_sessions: getNumber(r, ['engaged_sessions', 'Engaged Sessions', 'engagedSessions']),
+      engagement_rate: getNumber(r, ['engagement_rate', 'Engagement Rate', 'engagementRate']),
+      page_views: getNumber(r, ['page_views', 'Page Views', 'pageViews', 'views', 'Views']),
+      key_events: getNumber(r, ['key_events', 'Key Events', 'keyEvents', 'events', 'Events']),
+      form_submissions: getNumber(r, ['form_submissions', 'Form Submissions', 'formSubmissions', 'forms', 'submissions']),
+      click_to_call: getNumber(r, ['click_to_call', 'Click to Call', 'clickToCall', 'calls', 'Calls']),
+      line_clicks: getNumber(r, ['line_clicks', 'LINE Clicks', 'lineClicks', 'line', 'LINE']),
+      product_inquiry: getNumber(r, ['product_inquiry', 'Product Inquiry', 'productInquiry', 'inquiries', 'Inquiries']),
+      boq_upload: getNumber(r, ['boq_upload', 'BOQ Upload', 'boqUpload', 'uploads', 'Uploads']),
     }));
     const result = addWebsite(items);
     addImportJob({ job_id: `IJ_${Date.now()}`, module: 'Website Analytics', file_name: 'import.csv', file_size: 0, status: 'Completed', total_rows: rows.length, new_rows: result.new, updated_rows: result.updated, skipped_rows: result.skipped, rejected_rows: result.rejected, errors: result.errors.map(e => ({ row: 0, field: '', message: e })), created_at: new Date().toISOString(), created_by: 'Admin' });

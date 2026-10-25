@@ -78,13 +78,39 @@ export function ImportModal({ isOpen, onClose, title, expectedColumns, onImport 
     const reader = new FileReader();
     reader.onload = (ev) => {
       const text = ev.target?.result as string;
-      const lines = text.split('\n').filter(l => l.trim());
+      const lines = text.split(/\r?\n/).filter(l => l.trim());
       if (lines.length < 2) return;
-      const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+      
+      // Parse CSV with proper handling of quoted values
+      const parseCSVLine = (line: string): string[] => {
+        const result: string[] = [];
+        let current = '';
+        let inQuotes = false;
+        
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          if (char === '"') {
+            inQuotes = !inQuotes;
+          } else if (char === ',' && !inQuotes) {
+            result.push(current.trim());
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+        result.push(current.trim());
+        return result;
+      };
+
+      const headers = parseCSVLine(lines[0]);
       const rows = lines.slice(1).map(line => {
-        const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
+        const values = parseCSVLine(line);
         const row: Record<string, string> = {};
-        headers.forEach((h, i) => { row[h] = values[i] || ''; });
+        headers.forEach((h, i) => { 
+          const header = h.replace(/"/g, '').trim();
+          const value = values[i] ? values[i].replace(/"/g, '').trim() : '';
+          row[header] = value;
+        });
         return row;
       });
       setParsedData(rows);

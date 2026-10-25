@@ -35,21 +35,38 @@ export default function MarketingPerformance() {
   });
 
   const handleImport = (rows: Record<string, string>[]) => {
+    // Helper function to get value with multiple possible column names
+    const getValue = (r: Record<string, string>, keys: string[]): string => {
+      for (const key of keys) {
+        const value = r[key];
+        if (value && value.trim() !== '') {
+          return value.trim();
+        }
+      }
+      return '';
+    };
+
+    const getNumber = (r: Record<string, string>, keys: string[]): number => {
+      const value = getValue(r, keys);
+      const num = parseFloat(value);
+      return isNaN(num) ? 0 : num;
+    };
+
     const ads = rows.map(r => ({
       id: '',
-      campaign_id: r['campaign_id'] || r['Campaign ID'] || '',
-      platform: (r['platform'] || r['Platform'] || 'Facebook Ads') as any,
-      report_level: (r['report_level'] || r['Report Level'] || 'Campaign') as any,
-      date: r['date'] || r['Date'] || '',
-      spend: parseFloat(r['spend'] || r['Spend'] || '0'),
-      impressions: parseInt(r['impressions'] || r['Impressions'] || '0'),
-      reach: parseInt(r['reach'] || r['Reach'] || '0'),
-      clicks: parseInt(r['clicks'] || r['Clicks'] || '0'),
-      ctr: parseFloat(r['ctr'] || r['CTR'] || '0'),
-      cpc: parseFloat(r['cpc'] || r['CPC'] || '0'),
-      cpm: parseFloat(r['cpm'] || r['CPM'] || '0'),
-      leads: parseInt(r['leads'] || r['Leads'] || '0'),
-      qualified_leads: parseInt(r['qualified_leads'] || r['Qualified Leads'] || '0'),
+      campaign_id: getValue(r, ['campaign_id', 'Campaign ID', 'campaign', 'Campaign']),
+      platform: (getValue(r, ['platform', 'Platform', 'source', 'Source']) || 'Facebook Ads') as any,
+      report_level: (getValue(r, ['report_level', 'Report Level', 'level', 'Level']) || 'Campaign') as any,
+      date: getValue(r, ['date', 'Date', 'day', 'Day']),
+      spend: getNumber(r, ['spend', 'Spend', 'cost', 'Cost', 'amount', 'Amount']),
+      impressions: getNumber(r, ['impressions', 'Impressions', 'impression', 'Impression']),
+      reach: getNumber(r, ['reach', 'Reach']),
+      clicks: getNumber(r, ['clicks', 'Clicks', 'click', 'Click']),
+      ctr: getNumber(r, ['ctr', 'CTR', 'click_through_rate', 'Click Through Rate']),
+      cpc: getNumber(r, ['cpc', 'CPC', 'cost_per_click', 'Cost Per Click']),
+      cpm: getNumber(r, ['cpm', 'CPM', 'cost_per_mille', 'Cost Per Mille']),
+      leads: getNumber(r, ['leads', 'Leads', 'lead', 'Lead']),
+      qualified_leads: getNumber(r, ['qualified_leads', 'Qualified Leads', 'qualified', 'Qualified']),
     }));
     const result = addAds(ads);
     addImportJob({

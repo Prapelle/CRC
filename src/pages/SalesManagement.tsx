@@ -45,31 +45,53 @@ export default function SalesManagement() {
   ).map(([name, value]) => ({ name, value }));
 
   const handleImport = (rows: Record<string, string>[]) => {
-    const items = rows.map(r => ({
-      sales_id: '',
-      order_number: r['order_number'] || r['Order #'] || '',
-      invoice_number: r['invoice_number'] || r['Invoice #'] || undefined,
-      quotation_id: r['quotation_id'] || r['Quotation ID'] || undefined,
-      lead_id: r['lead_id'] || r['Lead ID'] || undefined,
-      customer_name: r['customer_name'] || r['Customer'] || '',
-      customer_type: (r['customer_type'] || r['Customer Type'] || 'ลูกค้าทั่วไป') as any,
-      order_date: r['order_date'] || r['Date'] || new Date().toISOString().split('T')[0],
-      sales_channel: r['sales_channel'] || r['Channel'] || 'Direct',
-      salesperson: r['salesperson'] || r['Salesperson'] || '',
-      order_status: (r['order_status'] || r['Status'] || 'Confirmed') as OrderStatus,
-      payment_status: (r['payment_status'] || r['Payment'] || 'Unpaid') as PaymentStatus,
-      shipping_fee: parseFloat(r['shipping_fee'] || r['Shipping'] || '0'),
-      subtotal: parseFloat(r['subtotal'] || r['Subtotal'] || '0'),
-      discount: parseFloat(r['discount'] || r['Discount'] || '0'),
-      tax_amount: parseFloat(r['tax'] || r['Tax'] || '0'),
-      grand_total: parseFloat(r['grand_total'] || r['Total'] || '0'),
-      net_sales: parseFloat(r['net_sales'] || r['Net Sales'] || r['subtotal'] || '0'),
-      cost_of_goods_sold: parseFloat(r['cogs'] || r['COGS'] || '0') || undefined,
-      gross_profit: parseFloat(r['gross_profit'] || r['Profit'] || '0') || undefined,
-      marketing_source: r['marketing_source'] || r['Source'] || undefined,
-      items: [],
-      created_at: new Date().toISOString(),
-    }));
+    // Helper function to get value with multiple possible column names
+    const getValue = (r: Record<string, string>, keys: string[]): string => {
+      for (const key of keys) {
+        const value = r[key];
+        if (value && value.trim() !== '') {
+          return value.trim();
+        }
+      }
+      return '';
+    };
+
+    const getNumber = (r: Record<string, string>, keys: string[]): number => {
+      const value = getValue(r, keys);
+      const num = parseFloat(value);
+      return isNaN(num) ? 0 : num;
+    };
+
+    const items = rows.map(r => {
+      const customerName = getValue(r, ['customer_name', 'Customer', 'customer', 'name', 'Name', 'company', 'Company']);
+      const subtotal = getNumber(r, ['subtotal', 'Subtotal', 'sub_total']);
+      
+      return {
+        sales_id: '',
+        order_number: getValue(r, ['order_number', 'Order #', 'order', 'Order', 'orderNumber']),
+        invoice_number: getValue(r, ['invoice_number', 'Invoice #', 'invoice', 'Invoice']) || undefined,
+        quotation_id: getValue(r, ['quotation_id', 'Quotation ID', 'quotation']) || undefined,
+        lead_id: getValue(r, ['lead_id', 'Lead ID', 'lead']) || undefined,
+        customer_name: customerName,
+        customer_type: (getValue(r, ['customer_type', 'Customer Type', 'type', 'Type']) || 'ลูกค้าทั่วไป') as any,
+        order_date: getValue(r, ['order_date', 'Date', 'date', 'orderDate']) || new Date().toISOString().split('T')[0],
+        sales_channel: getValue(r, ['sales_channel', 'Channel', 'channel', 'source', 'Source']) || 'Direct',
+        salesperson: getValue(r, ['salesperson', 'Salesperson', 'sales_person', 'assigned_to']),
+        order_status: (getValue(r, ['order_status', 'Status', 'status']) || 'Confirmed') as OrderStatus,
+        payment_status: (getValue(r, ['payment_status', 'Payment', 'payment']) || 'Unpaid') as PaymentStatus,
+        shipping_fee: getNumber(r, ['shipping_fee', 'Shipping', 'shipping', 'delivery']),
+        subtotal: subtotal,
+        discount: getNumber(r, ['discount', 'Discount']),
+        tax_amount: getNumber(r, ['tax', 'Tax', 'tax_amount', 'vat']),
+        grand_total: getNumber(r, ['grand_total', 'Total', 'total', 'amount']),
+        net_sales: getNumber(r, ['net_sales', 'Net Sales', 'net']) || subtotal,
+        cost_of_goods_sold: getNumber(r, ['cogs', 'COGS', 'cost', 'cost_of_goods_sold']) || undefined,
+        gross_profit: getNumber(r, ['gross_profit', 'Profit', 'profit']) || undefined,
+        marketing_source: getValue(r, ['marketing_source', 'Source', 'source', 'marketing']) || undefined,
+        items: [],
+        created_at: new Date().toISOString(),
+      };
+    });
     const result = addSales(items);
     addImportJob({ job_id: `IJ_${Date.now()}`, module: 'Sales', file_name: 'import.csv', file_size: 0, status: 'Completed', total_rows: rows.length, new_rows: result.new, updated_rows: result.updated, skipped_rows: result.skipped, rejected_rows: result.rejected, errors: result.errors.map(e => ({ row: 0, field: '', message: e })), created_at: new Date().toISOString(), created_by: 'Admin' });
     return result;

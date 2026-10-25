@@ -26,20 +26,37 @@ export default function QuotationManagement() {
   };
 
   const handleImport = (rows: Record<string, string>[]) => {
+    // Helper function to get value with multiple possible column names
+    const getValue = (r: Record<string, string>, keys: string[]): string => {
+      for (const key of keys) {
+        const value = r[key];
+        if (value && value.trim() !== '') {
+          return value.trim();
+        }
+      }
+      return '';
+    };
+
+    const getNumber = (r: Record<string, string>, keys: string[]): number => {
+      const value = getValue(r, keys);
+      const num = parseFloat(value);
+      return isNaN(num) ? 0 : num;
+    };
+
     const items = rows.map(r => ({
       quotation_id: '',
-      quotation_number: r['quotation_number'] || r['Quotation #'] || '',
-      lead_id: r['lead_id'] || r['Lead ID'] || '',
-      quotation_date: r['quotation_date'] || r['Date'] || new Date().toISOString().split('T')[0],
-      valid_until: r['valid_until'] || r['Valid Until'] || '',
-      salesperson: r['salesperson'] || r['Salesperson'] || '',
-      quotation_status: (r['status'] || r['Status'] || 'Draft') as QuotationStatus,
+      quotation_number: getValue(r, ['quotation_number', 'Quotation #', 'quotation', 'Quotation', 'quote_number', 'Quote #']),
+      lead_id: getValue(r, ['lead_id', 'Lead ID', 'lead', 'Lead']),
+      quotation_date: getValue(r, ['quotation_date', 'Date', 'date', 'quotationDate']) || new Date().toISOString().split('T')[0],
+      valid_until: getValue(r, ['valid_until', 'Valid Until', 'validUntil', 'expiry', 'Expiry']),
+      salesperson: getValue(r, ['salesperson', 'Salesperson', 'sales_person', 'Sales Person', 'assigned_to']),
+      quotation_status: (getValue(r, ['status', 'Status', 'quotation_status']) || 'Draft') as QuotationStatus,
       items: [],
-      subtotal: parseFloat(r['subtotal'] || r['Subtotal'] || '0'),
-      discount: parseFloat(r['discount'] || r['Discount'] || '0'),
-      tax_amount: parseFloat(r['tax'] || r['Tax'] || '0'),
-      shipping_fee: parseFloat(r['shipping'] || r['Shipping'] || '0'),
-      grand_total: parseFloat(r['grand_total'] || r['Total'] || '0'),
+      subtotal: getNumber(r, ['subtotal', 'Subtotal', 'sub_total']),
+      discount: getNumber(r, ['discount', 'Discount']),
+      tax_amount: getNumber(r, ['tax', 'Tax', 'tax_amount', 'vat', 'VAT']),
+      shipping_fee: getNumber(r, ['shipping', 'Shipping', 'shipping_fee', 'delivery']),
+      grand_total: getNumber(r, ['grand_total', 'Total', 'total', 'amount', 'Amount']),
       currency: 'THB',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
