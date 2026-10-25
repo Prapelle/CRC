@@ -1,0 +1,16 @@
+# This temporary workflow was disabled because repository Actions did not start it.
+name: Disabled temporary workflow
+on:
+  workflow_dispatch:
+    inputs:
+      noop:
+        description: Do not run; retained only for cleanup verification
+        required: false
+        type: boolean
+        default: false
+jobs:
+  noop:
+    if: false
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo disabled
