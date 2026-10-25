@@ -85,6 +85,8 @@ export default function MarketingPerformance() {
         cpc: getNumber(r, ['cpc', 'CPC', 'cost_per_click', 'Cost Per Click', 'Cost per click (all)']),
         cpm: getNumber(r, ['cpm', 'CPM', 'cost_per_mille', 'Cost Per Mille', 'CPM (cost per 1,000 impressions)']),
         leads: getNumber(r, ['leads', 'Leads', 'lead', 'Lead', 'Conversions', 'Results', 'Messaging conversations started']),
+        source_file: sourceFileName,
+        source_data_json: JSON.stringify(r),
         qualified_leads: getNumber(r, ['qualified_leads', 'Qualified Leads', 'qualified', 'Qualified']),
       };
     }).filter(item => item.campaign_id !== 'Imported Campaign' || item.spend || item.impressions || item.clicks);
