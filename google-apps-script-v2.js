@@ -112,16 +112,16 @@ function doPost(e) {
 function ensureSheet(sheetName) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName(sheetName);
-  
-  if (!sheet) {
-    sheet = ss.insertSheet(sheetName);
-    const headers = HEADERS[sheetName] || [];
-    if (headers.length > 0) {
-      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-      sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
-    }
+  if (!sheet) sheet = ss.insertSheet(sheetName);
+
+  // Create standard CRC headers for both newly created and existing empty sheets.
+  // Never overwrite a populated/custom sheet because it may contain user data.
+  const headers = HEADERS[sheetName] || [];
+  if (headers.length > 0 && sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
+    sheet.setFrozenRows(1);
   }
-  
   return sheet;
 }
 
