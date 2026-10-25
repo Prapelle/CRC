@@ -7,6 +7,8 @@ create table if not exists public.crc_dashboard_state (
 );
 
 alter table public.crc_dashboard_state enable row level security;
+revoke all on public.crc_dashboard_state from anon;
+grant select, insert, update on public.crc_dashboard_state to authenticated;
 
 drop policy if exists "Authenticated users can read CRC dashboard state" on public.crc_dashboard_state;
 create policy "Authenticated users can read CRC dashboard state"
