@@ -26,12 +26,12 @@ const SHEETS = {
 // Headers for each sheet
 const HEADERS = {
   campaigns: ['campaign_id', 'campaign_name', 'platform', 'start_date', 'end_date', 'status', 'budget'],
-  advertising: ['id', 'campaign_id', 'platform', 'report_level', 'date', 'spend', 'impressions', 'reach', 'clicks', 'ctr', 'cpc', 'cpm', 'leads', 'qualified_leads'],
-  social: ['id', 'platform', 'page_id', 'page_name', 'post_id', 'post_url', 'post_date', 'metric_date', 'content_type', 'content_category', 'reach', 'impressions', 'engagement', 'reactions', 'comments', 'shares', 'link_clicks', 'video_views', 'leads_generated'],
-  website: ['id', 'date', 'source', 'medium', 'campaign', 'landing_page', 'sessions', 'users', 'new_users', 'engaged_sessions', 'engagement_rate', 'page_views', 'key_events', 'form_submissions', 'click_to_call', 'line_clicks', 'product_inquiry', 'boq_upload'],
-  leads: ['lead_id', 'created_at', 'inquiry_date', 'source', 'customer_type', 'customer_name', 'contact_person', 'phone', 'email', 'product_category', 'steel_type', 'quantity', 'unit', 'estimated_budget', 'lead_status', 'lead_temperature', 'assigned_to'],
+  advertising: ['id', 'campaign_id', 'platform', 'report_level', 'date', 'spend', 'impressions', 'reach', 'clicks', 'ctr', 'cpc', 'cpm', 'leads', 'qualified_leads', 'source_file', 'source_data_json'],
+  social: ['id', 'platform', 'page_id', 'page_name', 'post_id', 'post_url', 'post_date', 'metric_date', 'content_type', 'content_category', 'reach', 'impressions', 'engagement', 'reactions', 'comments', 'shares', 'link_clicks', 'video_views', 'leads_generated', 'source_file', 'source_data_json'],
+  website: ['id', 'date', 'source', 'medium', 'campaign', 'landing_page', 'sessions', 'users', 'new_users', 'engaged_sessions', 'engagement_rate', 'page_views', 'key_events', 'form_submissions', 'click_to_call', 'line_clicks', 'product_inquiry', 'boq_upload', 'source_file', 'source_data_json'],
+  leads: ['lead_id', 'created_at', 'inquiry_date', 'source', 'customer_type', 'customer_name', 'contact_person', 'phone', 'email', 'product_category', 'steel_type', 'quantity', 'unit', 'estimated_budget', 'lead_status', 'lead_temperature', 'assigned_to', 'source_file', 'source_data_json'],
   quotations: ['quotation_id', 'quotation_number', 'lead_id', 'quotation_date', 'valid_until', 'salesperson', 'quotation_status', 'subtotal', 'discount', 'tax_amount', 'shipping_fee', 'grand_total'],
-  sales: ['sales_id', 'order_number', 'invoice_number', 'order_date', 'customer_name', 'customer_type', 'sales_channel', 'salesperson', 'order_status', 'payment_status', 'subtotal', 'discount', 'tax_amount', 'grand_total', 'net_sales', 'gross_profit', 'marketing_source'],
+  sales: ['sales_id', 'order_number', 'invoice_number', 'order_date', 'customer_name', 'customer_type', 'sales_channel', 'salesperson', 'order_status', 'payment_status', 'subtotal', 'discount', 'tax_amount', 'grand_total', 'net_sales', 'gross_profit', 'marketing_source', 'source_file', 'source_data_json'],
   users: ['user_id', 'username', 'password', 'full_name', 'email', 'role'],
 };
 
@@ -121,6 +121,11 @@ function ensureSheet(sheetName) {
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
     sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
     sheet.setFrozenRows(1);
+  } else if (headers.length > 0 && sheet.getLastRow() > 0) {
+    // Append newly introduced columns without reordering or overwriting existing data.
+    const current = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
+    const missing = headers.filter(header => !current.includes(header));
+    if (missing.length) sheet.getRange(1, current.length + 1, 1, missing.length).setValues([missing]).setFontWeight('bold');
   }
   return sheet;
 }
