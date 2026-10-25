@@ -100,6 +100,21 @@ export default function SocialContent() {
       const num = Number(raw.replace(/[^0-9.\\-]/g, ''));
       return raw !== '' && Number.isFinite(num) ? num : 0;
     };
+    // Strict header matching for reactions prevents the combined
+    // "Reactions, comments and shares" metric being counted as reactions.
+    const getExactNumber = (r: Record<string, string>, aliases: string[]): number => {
+      const normalized = (value: string) => value.toLowerCase().replace(/^\\uFEFF/, '').replace(/[^a-z0-9ก-๙]/g, '');
+      const keys = new Map(Object.entries(r).map(([key, value]) => [normalized(key), value]));
+      for (const alias of aliases) {
+        const value = keys.get(normalized(alias));
+        if (value?.trim()) {
+          const raw = value.replace(/,/g, '').replace(/%/g, '').trim();
+          const num = Number(raw.replace(/[^0-9.\\-]/g, ''));
+          return Number.isFinite(num) ? num : 0;
+        }
+      }
+      return 0;
+    };
     const getDate = (raw: string): string => {
       if (!raw) return ''; const value = raw.trim(); const iso = value.match(/^(\\d{4})-(\\d{1,2})-(\\d{1,2})/);
       if (iso) return iso[1] + '-' + iso[2].padStart(2, '0') + '-' + iso[3].padStart(2, '0');
@@ -122,7 +137,7 @@ export default function SocialContent() {
         reach: getNumber(r, ['reach', 'Post reach', 'Reach (total)', 'Lifetime Post Total Reach', 'Total reach', 'Accounts reached']),
         impressions: getNumber(r, ['impressions', 'Post impressions', 'Lifetime Post Total Impressions', 'Total impressions']),
         engagement: getNumber(r, ['engagement', 'engagements', 'Post engagements', 'Interactions', 'Content interactions', 'Reactions, comments and shares', 'People who engaged', 'Lifetime Engaged Users']),
-        reactions: getNumber(r, ['reactions', 'reaction', 'likes', 'Likes', 'Post reactions', 'Post reactions total']),
+        reactions: getExactNumber(r, ['reactions', 'reaction', 'likes', 'Post reactions', 'Post reactions total']),
         comments: getNumber(r, ['comments', 'comment', 'Post comments']), shares: getNumber(r, ['shares', 'share', 'Post shares']),
         link_clicks: getNumber(r, ['link_clicks', 'Link Clicks', 'linkClicks', 'clicks', 'Clicks', 'Post link clicks', 'Outbound clicks']),
         video_views: getNumber(r, ['video_views', 'Video Views', 'videoViews', '3-second video views', 'Video views', 'ThruPlays']),
