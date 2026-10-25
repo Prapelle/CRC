@@ -121,6 +121,8 @@ export default function SalesManagement() {
         gross_profit: getNumber(r, ['gross_profit', 'Profit', 'profit', 'กำไรขั้นต้น']) || undefined,
         marketing_source: value(r, ['marketing_source', 'Source', 'source', 'marketing', 'แหล่งที่มา']) || undefined,
         items: [],
+        source_file: sourceFileName,
+        source_data_json: JSON.stringify(r),
         created_at: new Date().toISOString(),
       };
     }).filter((item): item is NonNullable<typeof item> => item !== null);
